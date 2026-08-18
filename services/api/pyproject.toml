@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cellgen-api"
+version = "0.1.0"
+description = "CellGenerator Studio API: sandbox lifecycle, state capture, opencode proxy"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "loguru>=0.7.2",
+]
+
+[project.optional-dependencies]
+# MongoDB is optional: the API falls back to a file-backed store, which is
+# adequate for a single user and keeps local development dependency-free.
+mongo = ["pymongo>=4.7"]
+# Only needed to run against real E2B sandboxes; the local backend does not.
+e2b = ["e2b>=1.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[tool.setuptools.packages.find]
+include = ["cellgen_api*"]

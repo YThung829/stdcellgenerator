@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cellgen-engine"
+version = "2.0.0"
+description = "SMTCell 2.0 - CP-SAT standard-cell simultaneous place & route"
+readme = "README.md"
+license = { file = "LICENSE" }
+# The codebase uses PEP 604 unions, builtin generics and itertools.pairwise.
+requires-python = ">=3.11"
+
+# Lower bounds match the versions the README documented; they are the oldest
+# combination the flow is known to work with. Deliberately not upper-capped --
+# the web backend pins exact versions in its lockfile instead.
+dependencies = [
+    "ortools>=9.14.6206",
+    "loguru>=0.7.2",
+    "numpy>=2.2.6",
+    "networkx>=3.4.2",
+    "scikit-learn>=1.7.0",
+    "matplotlib>=3.10.3",
+    "klayout>=0.30.2",
+]
+
+[project.optional-dependencies]
+# The PySide6 control GUI is optional: solver workers and sandboxes never need it.
+gui = ["PySide6>=6.6"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+# One entry point for a single isolated run; used by the worker and by the
+# in-sandbox smoke check.
+cellgen-run = "src.cellgen.run:main"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Solves are slow enough that quiet output is easier to read than progress dots.
+addopts = "-ra"

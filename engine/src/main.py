@@ -22,11 +22,13 @@ scope. FinFET always solves the cell as given.
 """
 
 import argparse
+import sys
 
 from loguru import logger
 
 from src.cellgen.archit import config
 from src.cellgen.core.entity import LayerStack
+from src.cellgen.core.errors import SolveFailed
 from src.cellgen.core.util import read_cdl_file
 from src.cellgen.archit.QFET.tech import QFET_Tech
 from src.cellgen.archit.CFET.tech import CFET_Tech
@@ -159,14 +161,21 @@ def main():
         num_rt_track=args.track,
         height_config=args.height_config,
     )
-    SMTCell(
-        cdl_file=args.netlist,
-        cell_config=args.cell_config,
-        technology=technology,
-        circuit_names=args.cell_names,
-        output_dir=args.output_dir,
-        flag_log_constraints=flag_log,
-    )
+    try:
+        SMTCell(
+            cdl_file=args.netlist,
+            cell_config=args.cell_config,
+            technology=technology,
+            circuit_names=args.cell_names,
+            output_dir=args.output_dir,
+            flag_log_constraints=flag_log,
+        )
+    except SolveFailed as exc:
+        # The orchestrators used to call exit(1) from inside library code. They
+        # now raise; the CLI keeps the original exit status so the Makefile and
+        # any existing scripts behave identically.
+        logger.error(str(exc))
+        sys.exit(1)
 
 
 if __name__ == "__main__":

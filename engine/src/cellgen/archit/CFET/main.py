@@ -60,6 +60,7 @@ from src.cellgen.core import pin
 from src.cellgen.core import routing as rt
 from src.cellgen.core import rule
 from src.cellgen.core.entity import Circuit, Model
+from src.cellgen.core.errors import SolveFailed
 from src.cellgen.core.graph import LayeredGridGraph
 from src.cellgen.core.objective import Objective
 from src.cellgen.core.util import log_variable_info, print_smtcell_banner
@@ -2522,11 +2523,11 @@ class CFET:
         elif status == cp_model.UNKNOWN:
             logger.error("Solver returned UNKNOWN.")
             if exit_on_unsat:
-                exit(1)
+                raise SolveFailed("UNKNOWN", self.circuit.subckt_name)
             return None, None
         else:
             logger.error("No solution found (UNSAT/INFEASIBLE).")
             if exit_on_unsat:
-                exit(1)
+                raise SolveFailed("INFEASIBLE", self.circuit.subckt_name)
             return None, None
         return total_obj, self.solver.ObjectiveValue()

@@ -198,3 +198,22 @@ class TestNetlistParsing:
         assert len(cells) == 46
         for expected in ("INV_X1", "NAND2_X1", "AOI21_X2", "DFFHQN_X1"):
             assert expected in cells
+
+    def test_list_cells_needs_no_output_dir(self):
+        """Listing writes nothing, so it must not demand somewhere to write."""
+        proc = subprocess.run(
+            [sys.executable, "-m", "src.cellgen.run",
+             "--preset", "FinFET_4T_SH", "--list-cells"],
+            cwd=REPO_ROOT, capture_output=True, text=True,
+        )
+        assert proc.returncode == 0, proc.stderr[-2000:]
+        assert "INV_X1" in proc.stdout.split()
+
+    def test_solving_still_requires_an_output_dir(self):
+        proc = subprocess.run(
+            [sys.executable, "-m", "src.cellgen.run",
+             "--preset", "FinFET_4T_SH", "--cell", "INV_X1"],
+            cwd=REPO_ROOT, capture_output=True, text=True,
+        )
+        assert proc.returncode != 0
+        assert "--output-dir" in proc.stderr

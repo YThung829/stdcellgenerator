@@ -89,8 +89,21 @@ class SandboxService:
         Reusing an existing ``sandbox_id`` rebuilds that workspace: the backend
         gives it the same working directory, which is what lets restored
         opencode sessions attach to the right project.
+
+        Creating an id that is already running is a no-op rather than a second
+        sandbox. The frontend calls this on every reconnect, and a sandbox's
+        opencode port is derived from its id -- so starting a duplicate would
+        fail to bind and take the working sandbox down with it.
         """
         sandbox_id = sandbox_id or new_id("sbx")
+
+        live = self._handles.get(sandbox_id)
+        if live is not None and await self.backend.health(live):
+            logger.info(f"[{sandbox_id}] already running; returning existing sandbox")
+            if sandbox_id not in self._proxies:
+                await self._start_proxy(live)
+            return self._record(live, restored_sessions=0)
+
         handle = await self.backend.create(sandbox_id)
         self._handles[sandbox_id] = handle
         await self._start_proxy(handle)

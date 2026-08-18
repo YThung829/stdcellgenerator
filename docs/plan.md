@@ -340,8 +340,9 @@ runs         { _id, experiment_id, cell, status, celery_task_id, pid,
 | 4 — 導出到 Mongo（Artifact） | ✅ 完成 | `services/api/cellgen_api/artifacts.py`、`tests/test_artifacts.py` |
 | 5 — cellgen MCP server | ⬜ 未開始 | |
 | 6–8 — Tab 2 實驗區 | ⬜ 未開始 | |
+| — 文件 | ✅ 完成 | `README.md`、`docs/manual.md`（每環節附實跑截圖） |
 
-測試現況：engine 43 passed、api 20 passed。
+測試現況：engine 45 passed、api 22 passed。
 
 ### 實作中推翻的計劃假設
 
@@ -350,6 +351,15 @@ runs         { _id, experiment_id, cell, status, celery_task_id, pid,
 3. **subpath 代理行不通** — opencode UI 用 root-absolute 路徑載 `/assets/*.js`，且自己會打 `/api/*`（與本服務路由衝突）。改成**每個沙盒一個 root proxy port**。
 4. **沙盒 workdir 必須是 git repo** — opencode 以 git worktree 認 project；不是 repo 的話所有 session 會落到 catch-all 的 `global` project，UI 上看不到工作區。
 5. **版面幾何不可重現** — 同設定連跑 4 次，objective 恆為 1021.0，但版面有 3 種。`num_search_workers=1` 會被 `model_preset` 2 蓋掉、`deterministic_solve=true` 也不管用。→ 實驗比對只比指標。見 `docs/solve-reproducibility.md`。
+
+### 寫文件時實際走一遍流程才發現的四個缺陷
+
+都已修好並補上回歸測試（每條都先確認「修復前會失敗」）。
+
+1. **代理把壓縮回應標成純 JSON** — `_STRIP_RESPONSE` 剝掉 `content-encoding`，但 body 是用 `aiter_raw()` 原樣轉發的。瀏覽器收到貼著 `application/json` 標籤的 gzip 位元組，opencode UI 載得進來卻解不開自己的 API 回應。→ 保留 `content-encoding`；client 沒帶 `accept-encoding` 時強制 `identity`，避免回傳對方沒要求的編碼。
+2. **重複建立同一個沙盒會打死原本那個** — 沙盒的 opencode 埠由 id 推導，第二個程序綁不上就 `FAILED`，同時把原本的 proxy 停掉。前端每次重連都會打這支 API。→ id 已在跑就直接回傳既有沙盒。
+3. **匯出的 patch 夾帶 solver 產出** — engine 的 `.gitignore` 只擋 `output/`，沒擋 `--output-dir` 慣用的 `runs/`。一次 solve 就讓 artifact 從 1.1 KB 漲到 222 KB。→ `runs/` 加進 engine `.gitignore`。
+4. **`--list-cells` 強制要求 `--output-dir`** — 只是列 netlist 裡的 cell，卻要先指定一個不會被寫入的目錄。→ 改成解題時才必填。
 
 ### Commit 歷程
 

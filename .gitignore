@@ -22,3 +22,6 @@ dist/
 # Per-run solver output (see engine/.gitignore for engine-internal ignores)
 runs/
 scratch/
+
+# Default CELLGEN_DATA_ROOT: sandbox working copies and the file-backed store
+.cellgen/

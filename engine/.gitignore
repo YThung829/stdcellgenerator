@@ -25,6 +25,10 @@ config.mk
 # === Generated build artifacts (reproducible via `make config/spnr/gds/lef`) ===
 output/
 
+# Per-run output from `python -m src.cellgen.run --output-dir runs/<name>`.
+# Ignored so a sandbox export carries source edits, not solver logs.
+runs/
+
 # === EDA / solver artifacts (in case any land outside output/) ===
 *.res
 *.var

@@ -147,6 +147,60 @@ async def test_proxy_forwards_writes(client):
 
 
 @requires_opencode
+async def test_proxy_does_not_mislabel_compressed_responses(client):
+    """A compressed body must keep its `content-encoding`.
+
+    The proxy forwards bodies raw, so dropping the header handed the browser
+    gzip bytes labelled `application/json`: opencode's UI loaded but could
+    decode none of its own API responses.
+    """
+    import httpx
+
+    created = (await client.post("/api/sandboxes",
+                                 json={"sandbox_id": "ws-gzip"})).json()
+    proxy_url = created["proxy_url"]
+
+    async with httpx.AsyncClient(timeout=60) as direct:
+        # A large enough payload that the upstream actually compresses it.
+        resp = await direct.get(f"{proxy_url}/config/providers",
+                                headers={"accept-encoding": "gzip"})
+        assert resp.status_code == 200
+        # httpx decodes per the header, so this only parses if the two agree.
+        assert "providers" in resp.json()
+
+        plain = await direct.get(f"{proxy_url}/config/providers",
+                                 headers={"accept-encoding": "identity"})
+        assert "content-encoding" not in plain.headers
+        assert "providers" in plain.json()
+
+
+@requires_opencode
+async def test_creating_a_running_sandbox_is_a_no_op(client):
+    """Re-creating a live id must not start a second, port-clashing sandbox.
+
+    The frontend re-issues this on every reconnect. Spawning a duplicate left
+    the original unreachable, because a sandbox's opencode port comes from its
+    id and the second process could not bind it.
+    """
+    import httpx
+
+    first = (await client.post("/api/sandboxes",
+                               json={"sandbox_id": "ws-twice"})).json()
+    async with httpx.AsyncClient(timeout=30) as direct:
+        await direct.post(f"{first['proxy_url']}/session", json={"title": "keep me"})
+
+    again = (await client.post("/api/sandboxes",
+                               json={"sandbox_id": "ws-twice"})).json()
+    assert again["state"] == "running"
+    assert again["proxy_url"] == first["proxy_url"]
+
+    # The original sandbox is untouched, work and all.
+    async with httpx.AsyncClient(timeout=30) as direct:
+        sessions = (await direct.get(f"{again['proxy_url']}/session")).json()
+    assert [s["title"] for s in sessions] == ["keep me"]
+
+
+@requires_opencode
 async def test_pause_snapshots_first_then_resume_restores(client):
     import httpx
 

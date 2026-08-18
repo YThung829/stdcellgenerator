@@ -47,7 +47,11 @@ _STRIP_REQUEST = {
 _STRIP_RESPONSE = {
     "connection", "keep-alive", "transfer-encoding", "upgrade",
     "proxy-authenticate", "proxy-authorization", "te", "trailer",
-    "content-encoding", "content-length",
+    # `content-length` is dropped because the response is re-chunked.
+    # `content-encoding` is deliberately *kept*: the body is forwarded raw
+    # (see `aiter_raw` below), so stripping the header would hand the browser
+    # compressed bytes labelled as plain JSON.
+    "content-length",
 }
 
 
@@ -77,6 +81,11 @@ class SandboxProxy:
         headers = {k: v for k, v in request.headers.items()
                    if k.lower() not in _STRIP_REQUEST}
         body = await request.body()
+
+        # The body is forwarded raw, so the upstream must never use an encoding
+        # the browser did not ask for. httpx would otherwise supply its own
+        # default `accept-encoding` when the client sent none.
+        headers.setdefault("accept-encoding", "identity")
 
         client = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0))
         req = client.build_request(

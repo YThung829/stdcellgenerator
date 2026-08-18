@@ -307,7 +307,9 @@ def _parse_args(argv=None):
                    help="Preset name under input/presets/ (without .mk).")
     p.add_argument("--cell", action="append", default=[], dest="cells",
                    help="Cell to solve; repeatable. Defaults to the preset's CELL_NAME.")
-    p.add_argument("--output-dir", required=True, type=Path,
+    # Required to solve, but not to `--list-cells`, which writes nothing; that
+    # is enforced after parsing so listing does not demand a pointless path.
+    p.add_argument("--output-dir", type=Path,
                    help="Per-run output directory. Always created fresh; configs are regenerated.")
     p.add_argument("--override", action="append", default=[], metavar="KEY[.SUB]=VALUE",
                    help="Cell-config override, repeatable. Applied after the preset's CONFIG_OVERRIDES.")
@@ -318,7 +320,10 @@ def _parse_args(argv=None):
                    help="Dump every CP-SAT constraint to constraint/<cell>.log (can exceed 500 MB).")
     p.add_argument("--list-cells", action="store_true",
                    help="Print the cells available in the preset's netlist and exit.")
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if not args.list_cells and args.output_dir is None:
+        p.error("the following arguments are required: --output-dir")
+    return args
 
 
 def main(argv=None) -> int:

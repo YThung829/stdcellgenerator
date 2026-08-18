@@ -12,6 +12,7 @@ import time
 
 from loguru import logger
 
+from cellgen_api.artifacts import Artifact, capture
 from cellgen_api.backends.base import SandboxBackend, SandboxHandle, SandboxState
 from cellgen_api.proxy import SandboxProxy
 from cellgen_api.state import SandboxSnapshot, SandboxStateStore
@@ -19,6 +20,7 @@ from cellgen_api.store import Store, new_id
 
 SANDBOXES = "sandboxes"
 SNAPSHOTS = "snapshots"
+ARTIFACTS = "artifacts"
 
 
 class SandboxService:
@@ -126,6 +128,34 @@ class SandboxService:
         })
         self._record(handle, last_snapshot_id=doc["_id"])
         return doc
+
+    async def export_artifact(self, sandbox_id: str, name: str,
+                              description: str = "") -> dict:
+        """Capture the sandbox's work as a stored, experiment-ready artifact.
+
+        This is the only route out of a sandbox: the sandbox cannot push, and
+        nothing in it touches the upstream engine.
+        """
+        handle = self._require_handle(sandbox_id)
+        artifact = await capture(self.backend, handle, name, description)
+        return self.store.upsert(ARTIFACTS, {
+            "_id": new_id("art"),
+            "sandbox_id": sandbox_id,
+            "name": name,
+            "description": description,
+            "artifact": artifact.to_dict(),
+            "plugin_count": len(artifact.plugins),
+            "patch_bytes": len(artifact.engine_patch),
+            "changed_files": artifact.changed_files,
+            "size_bytes": artifact.size_bytes,
+        })
+
+    def list_artifacts(self) -> list[dict]:
+        return self.store.list(ARTIFACTS)
+
+    def get_artifact(self, artifact_id: str) -> Artifact | None:
+        doc = self.store.get(ARTIFACTS, artifact_id)
+        return Artifact.from_dict(doc["artifact"]) if doc else None
 
     async def pause(self, sandbox_id: str) -> dict:
         """Snapshot first, then suspend.

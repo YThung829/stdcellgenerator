@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from pydantic import BaseModel
 
+from cellgen_api.artifacts import ArtifactError
 from cellgen_api.config import settings
 from cellgen_api.service import SandboxService
 from cellgen_api.store import build_store
@@ -65,6 +66,11 @@ def service(request: Request) -> SandboxService:
 class CreateSandbox(BaseModel):
     sandbox_id: str | None = None
     restore_from: str | None = None
+
+
+class ExportArtifact(BaseModel):
+    name: str
+    description: str = ""
 
 
 @app.get("/api/health")
@@ -135,3 +141,37 @@ async def sandbox_proxy_url(sandbox_id: str, request: Request):
     if url is None:
         raise HTTPException(409, f"sandbox {sandbox_id} is not running")
     return {"proxy_url": url}
+
+
+@app.post("/api/sandboxes/{sandbox_id}/export", status_code=201)
+async def export_artifact(sandbox_id: str, body: ExportArtifact, request: Request):
+    """Capture this sandbox's work as an artifact an experiment can run.
+
+    Everything the user changed travels as files: plugins individually, so a
+    run can toggle and re-parameterise them, and any other edit as a patch
+    against the sandbox baseline.
+    """
+    try:
+        return await service(request).export_artifact(
+            sandbox_id, body.name, body.description)
+    except KeyError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ArtifactError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/artifacts")
+async def list_artifacts(request: Request):
+    """Artifacts available to import into an experiment."""
+    return [
+        {k: v for k, v in doc.items() if k != "artifact"}
+        for doc in service(request).list_artifacts()
+    ]
+
+
+@app.get("/api/artifacts/{artifact_id}")
+async def get_artifact(artifact_id: str, request: Request):
+    artifact = service(request).get_artifact(artifact_id)
+    if artifact is None:
+        raise HTTPException(404, f"no such artifact: {artifact_id}")
+    return artifact.to_dict()

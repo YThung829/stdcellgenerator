@@ -90,7 +90,20 @@ class LocalBackend(SandboxBackend):
             workdir=str(workdir),
             password=secrets.token_urlsafe(16),
         )
+        # The baseline commit is what "what changed in this sandbox" is
+        # measured against when the user exports their work.
+        code, out, _ = await self._git(workdir, "rev-parse", "HEAD")
+        if code == 0:
+            handle.meta["baseline_commit"] = out.strip()
         return await self._start(handle)
+
+    @staticmethod
+    async def _git(workdir: Path, *args: str) -> tuple[int, str, str]:
+        proc = await asyncio.create_subprocess_exec(
+            "git", *args, cwd=workdir,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        out, err = await proc.communicate()
+        return proc.returncode, out.decode(errors="replace"), err.decode(errors="replace")
 
     @staticmethod
     async def _ensure_git_repo(workdir: Path) -> None:

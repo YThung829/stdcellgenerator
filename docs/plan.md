@@ -24,6 +24,8 @@
 | 求解執行 | 自架 worker + Celery + Redis（非 E2B） |
 | MongoDB 粒度 | Constraint plugin 化 — 存 plugin 原始碼，實驗時動態組裝 |
 | Plugin 重構幅度 | 分兩階段 — 先做掛點，之後再把既有 constraint 逐步搬進 registry |
+| **沙盒與 engine 的關係** | **沙盒內的任何修改都不得影響 CP-SAT 本體**；沙盒只是可拋棄的工作副本，沒有 push 路徑 |
+| **開發成果的交付方式** | Tab 1 產出的 **code 或 plugin 一律存成檔案**，從沙盒拉到 MongoDB，Tab 2 再匯入成實驗 |
 | OpenCode 嵌入 | `opencode serve`/`web`，前端一個框裝 web UI；保留未來掛 MCP tool |
 | 實驗維度 | 先做單點批次執行，不做笛卡爾積 |
 | 結果呈現 | 指標表格 + 版面圖比對、即時 solver log 串流、跨實驗分析圖表 |
@@ -205,7 +207,34 @@ Vite + React + TS、TanStack Query、Tailwind + shadcn/ui。
 - 側欄：目前 `plugins/` 檔案清單、最近一次 smoke test 結果、「導出這條 constraint」/「導出整個版本」按鈕。
 - 首次進入若有既有 sandbox → 顯示「還原中」→ resume → iframe 掛載。
 
-## Phase 4 — 導出到 MongoDB
+## Phase 4 — 導出到 MongoDB（Artifact）
+
+**沙盒是可拋棄的工作副本，不能 push、不能影響上游 engine。** 工作離開沙盒的唯一路徑就是存成檔案 → MongoDB → Tab 2 匯入。
+
+需要帶出去的有兩種改動，各自用不同形式保存：
+
+| 改動 | 形式 | 為什麼 |
+|---|---|---|
+| Constraint plugin（`plugins/*.py` + `manifest.json`） | **逐個抽出成結構化項目** | 實驗要能單獨開關、單獨改參數；那是文件模型，不是 commit 模型 |
+| 其他任何檔案編輯（改 objective、改既有 constraint…） | **對 baseline commit 的 unified diff** | plugin 表達不了，但不能就這樣默默丟掉 |
+
+沙盒建立時會做一個 `Sandbox baseline` commit，之後 `git diff --cached <baseline>` 就是「這個沙盒改了什麼」。Plugin 從 patch 裡分離出來單獨保存，其餘留在 patch 裡。
+
+Artifact 結構：
+
+```
+{ sandbox_id, name, description,
+  engine_baseline,          # 沙盒 baseline commit
+  plugins: [{path, source}],
+  manifest: {...},
+  engine_patch: "<unified diff>",
+  changed_files: [...] }
+```
+
+匯入實驗：乾淨的 engine checkout → `git apply` patch → 寫入 plugins/manifest → 跑
+`python -m src.cellgen.run --plugin-dir <dir>`。
+
+### 原本規劃的 constraint / bundle collection
 
 ```
 constraints  { _id, name, description, tech[], stage, params_schema,
@@ -308,11 +337,11 @@ runs         { _id, experiment_id, cell, status, celery_task_id, pid,
 | 1.5 — Context 文件產生器 | ✅ 完成 | `engine/src/cellgen/plugins/context_doc.py` → `engine/AGENTS.md` |
 | 2 — 沙盒層（後端） | ✅ 完成 | `services/api/`（backends / state / proxy / service / main） |
 | 3 — Tab 1 前端 | ⬜ 未開始 | `apps/web/` |
-| 4 — 導出到 Mongo | ⬜ 未開始 | |
+| 4 — 導出到 Mongo（Artifact） | ✅ 完成 | `services/api/cellgen_api/artifacts.py`、`tests/test_artifacts.py` |
 | 5 — cellgen MCP server | ⬜ 未開始 | |
 | 6–8 — Tab 2 實驗區 | ⬜ 未開始 | |
 
-測試現況：engine 43 passed、api 14 passed。
+測試現況：engine 43 passed、api 20 passed。
 
 ### 實作中推翻的計劃假設
 

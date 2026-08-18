@@ -59,7 +59,7 @@ async def test_unknown_sandbox_is_404(client):
 
 
 async def test_proxy_refuses_when_sandbox_not_running(client):
-    resp = await client.get("/api/sandboxes/nope/oc/session")
+    resp = await client.get("/api/sandboxes/nope/proxy")
     assert resp.status_code == 409
 
 
@@ -82,35 +82,78 @@ async def test_create_list_and_delete(client):
 
 @requires_opencode
 async def test_proxy_reaches_opencode_without_leaking_credentials(client):
-    await client.post("/api/sandboxes", json={"sandbox_id": "ws-proxy"})
+    import httpx
+
+    created = (await client.post("/api/sandboxes",
+                                 json={"sandbox_id": "ws-proxy"})).json()
+    proxy_url = created["proxy_url"]
+    assert proxy_url
 
     # The browser sends no credentials; the proxy supplies them server-side.
-    resp = await client.get("/api/sandboxes/ws-proxy/oc/session")
-    assert resp.status_code == 200
-    assert resp.json() == []
+    async with httpx.AsyncClient(timeout=30) as direct:
+        resp = await direct.get(f"{proxy_url}/session")
+        assert resp.status_code == 200
+        assert resp.json() == []
 
-    # And the sandbox password is never exposed through the API surface.
+    # Neither the sandbox address nor its password is exposed to the client.
     record = (await client.get("/api/sandboxes/ws-proxy")).json()
     assert "password" not in record
     assert "base_url" not in record
 
 
 @requires_opencode
-async def test_proxy_forwards_writes(client):
-    await client.post("/api/sandboxes", json={"sandbox_id": "ws-write"})
-    created = await client.post("/api/sandboxes/ws-write/oc/session",
-                                json={"title": "via proxy"})
-    assert created.status_code == 200
-    assert created.json()["title"] == "via proxy"
+async def test_proxy_serves_the_ui_with_working_assets(client):
+    """The subpath proxy this replaced returned 404 for every asset.
 
-    listed = (await client.get("/api/sandboxes/ws-write/oc/session")).json()
-    assert [s["title"] for s in listed] == ["via proxy"]
+    opencode's UI references `/assets/...` absolutely, so a proxy mounted under
+    a path serves the HTML but none of the JavaScript. Serving at the root is
+    the whole reason for a per-sandbox port.
+    """
+    import re
+
+    import httpx
+
+    created = (await client.post("/api/sandboxes",
+                                 json={"sandbox_id": "ws-assets"})).json()
+    proxy_url = created["proxy_url"]
+
+    async with httpx.AsyncClient(timeout=30) as direct:
+        page = await direct.get(f"{proxy_url}/")
+        assert page.status_code == 200
+        assert "text/html" in page.headers["content-type"]
+
+        assets = re.findall(r'(?:src|href)="(/assets/[^"]+)"', page.text)
+        assert assets, "no bundled assets referenced; page shape changed?"
+        for asset in assets:
+            resp = await direct.get(f"{proxy_url}{asset}")
+            assert resp.status_code == 200, f"asset 404 through proxy: {asset}"
+
+
+@requires_opencode
+async def test_proxy_forwards_writes(client):
+    import httpx
+
+    created = (await client.post("/api/sandboxes",
+                                 json={"sandbox_id": "ws-write"})).json()
+    proxy_url = created["proxy_url"]
+
+    async with httpx.AsyncClient(timeout=30) as direct:
+        made = await direct.post(f"{proxy_url}/session", json={"title": "via proxy"})
+        assert made.status_code == 200
+        assert made.json()["title"] == "via proxy"
+
+        listed = (await direct.get(f"{proxy_url}/session")).json()
+        assert [s["title"] for s in listed] == ["via proxy"]
 
 
 @requires_opencode
 async def test_pause_snapshots_first_then_resume_restores(client):
-    await client.post("/api/sandboxes", json={"sandbox_id": "ws-cycle"})
-    await client.post("/api/sandboxes/ws-cycle/oc/session", json={"title": "work"})
+    import httpx
+
+    created = (await client.post("/api/sandboxes",
+                                 json={"sandbox_id": "ws-cycle"})).json()
+    async with httpx.AsyncClient(timeout=30) as direct:
+        await direct.post(f"{created['proxy_url']}/session", json={"title": "work"})
 
     paused = (await client.post("/api/sandboxes/ws-cycle/pause")).json()
     assert paused["state"] == "paused"
@@ -122,16 +165,23 @@ async def test_pause_snapshots_first_then_resume_restores(client):
 
     resumed = (await client.post("/api/sandboxes/ws-cycle/resume")).json()
     assert resumed["state"] == "running"
+    # A resumed sandbox gets a fresh proxy: its address changed.
+    assert resumed["proxy_url"]
 
-    sessions = (await client.get("/api/sandboxes/ws-cycle/oc/session")).json()
+    async with httpx.AsyncClient(timeout=30) as direct:
+        sessions = (await direct.get(f"{resumed['proxy_url']}/session")).json()
     assert [s["title"] for s in sessions] == ["work"]
 
 
 @requires_opencode
 async def test_rebuild_from_snapshot_after_total_loss(client):
     """The disposable-sandbox promise, through the HTTP API."""
-    await client.post("/api/sandboxes", json={"sandbox_id": "ws-lost"})
-    await client.post("/api/sandboxes/ws-lost/oc/session", json={"title": "precious"})
+    import httpx
+
+    created = (await client.post("/api/sandboxes",
+                                 json={"sandbox_id": "ws-lost"})).json()
+    async with httpx.AsyncClient(timeout=30) as direct:
+        await direct.post(f"{created['proxy_url']}/session", json={"title": "precious"})
     await client.post("/api/sandboxes/ws-lost/snapshot")
 
     # Lose the sandbox completely, keeping only the snapshot.
@@ -142,5 +192,6 @@ async def test_rebuild_from_snapshot_after_total_loss(client):
     assert rebuilt["state"] == "running"
     assert rebuilt["restored_sessions"] == 1
 
-    sessions = (await client.get("/api/sandboxes/ws-lost/oc/session")).json()
+    async with httpx.AsyncClient(timeout=30) as direct:
+        sessions = (await direct.get(f"{rebuilt['proxy_url']}/session")).json()
     assert [s["title"] for s in sessions] == ["precious"]

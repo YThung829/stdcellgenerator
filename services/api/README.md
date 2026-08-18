@@ -36,6 +36,24 @@ Open <http://localhost:8000/docs> for the generated API reference.
 | `CELLGEN_CORS_ORIGINS` | `http://localhost:5173` | comma-separated frontend origins |
 | `E2B_API_KEY` | unset | required by the e2b backend |
 
+## Reaching the opencode UI
+
+Each running sandbox gets its own reverse proxy on an ephemeral localhost port,
+reported as `proxy_url` (also available from
+`GET /api/sandboxes/{id}/proxy`). The frontend iframes that URL.
+
+It is a separate port rather than a path under this API because opencode's UI
+loads its assets from root-absolute URLs (`/assets/index-*.js`) and calls its
+own `/api/*` and `/global/*` endpoints — under a subpath mount every asset
+404s, and its `/api/*` routes would collide with this service's. The proxy
+injects the sandbox's basic-auth credentials, so the browser never receives
+the sandbox address or its password; requesting the sandbox directly returns
+401.
+
+The sandbox working directory is initialised as a git repository. opencode
+identifies a *project* by its git worktree; without one it files every session
+under a catch-all "global" project and the workspace never appears in the UI.
+
 ## How state survives a sandbox
 
 A sandbox is disposable. What persists is the exported opencode session JSON —

@@ -13,6 +13,7 @@ import time
 from loguru import logger
 
 from cellgen_api.backends.base import SandboxBackend, SandboxHandle, SandboxState
+from cellgen_api.proxy import SandboxProxy
 from cellgen_api.state import SandboxSnapshot, SandboxStateStore
 from cellgen_api.store import Store, new_id
 
@@ -27,15 +28,22 @@ class SandboxService:
         self.state_store = SandboxStateStore(backend, opencode_bin)
         # Live handles by sandbox id. Rebuilt from the store on demand.
         self._handles: dict[str, SandboxHandle] = {}
+        # One root-path proxy per running sandbox; see proxy.py for why the
+        # proxy cannot live under a path on this API.
+        self._proxies: dict[str, SandboxProxy] = {}
 
     # -- records ---------------------------------------------------------
     def _record(self, handle: SandboxHandle, **extra) -> dict:
+        proxy = self._proxies.get(handle.id)
         doc = {
             "_id": handle.id,
             "backend": handle.backend,
             "backend_id": handle.backend_id,
             "state": handle.state.value,
             "workdir": handle.workdir,
+            # What the frontend iframes. Note this deliberately exposes no
+            # sandbox address and no password.
+            "proxy_url": proxy.url if proxy else None,
             "updated_at": time.time(),
             **extra,
         }
@@ -54,6 +62,23 @@ class SandboxService:
     def handle(self, sandbox_id: str) -> SandboxHandle | None:
         return self._handles.get(sandbox_id)
 
+    def proxy_url(self, sandbox_id: str) -> str | None:
+        proxy = self._proxies.get(sandbox_id)
+        return proxy.url if proxy else None
+
+    async def _start_proxy(self, handle: SandboxHandle) -> None:
+        await self._stop_proxy(handle.id)
+        if handle.state is not SandboxState.RUNNING or not handle.base_url:
+            return
+        proxy = SandboxProxy(handle.base_url, handle.password)
+        await proxy.start()
+        self._proxies[handle.id] = proxy
+
+    async def _stop_proxy(self, sandbox_id: str) -> None:
+        proxy = self._proxies.pop(sandbox_id, None)
+        if proxy is not None:
+            await proxy.stop()
+
     # -- lifecycle -------------------------------------------------------
     async def create(self, sandbox_id: str | None = None,
                      restore_from: str | None = None) -> dict:
@@ -66,6 +91,7 @@ class SandboxService:
         sandbox_id = sandbox_id or new_id("sbx")
         handle = await self.backend.create(sandbox_id)
         self._handles[sandbox_id] = handle
+        await self._start_proxy(handle)
 
         restored = 0
         if handle.state is SandboxState.RUNNING:
@@ -112,6 +138,7 @@ class SandboxService:
             await self.snapshot(sandbox_id)
         except Exception:
             logger.exception(f"[{sandbox_id}] snapshot before pause failed; pausing anyway")
+        await self._stop_proxy(sandbox_id)
         handle = await self.backend.pause(handle)
         self._handles[sandbox_id] = handle
         return self._record(handle)
@@ -126,9 +153,13 @@ class SandboxService:
 
         handle = await self.backend.resume(handle)
         self._handles[sandbox_id] = handle
+        # The sandbox address changes across a pause/resume cycle, so the
+        # proxy is rebuilt rather than reused.
+        await self._start_proxy(handle)
         return self._record(handle)
 
     async def destroy(self, sandbox_id: str, keep_snapshots: bool = True) -> None:
+        await self._stop_proxy(sandbox_id)
         handle = self._handles.pop(sandbox_id, None)
         if handle is not None:
             await self.backend.destroy(handle)

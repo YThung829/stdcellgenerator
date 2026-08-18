@@ -1,29 +1,47 @@
-"""Same-origin reverse proxy to a sandbox's opencode server.
+"""Reverse proxy to a sandbox's opencode server.
 
 The frontend embeds opencode's web UI in an iframe. Pointing that iframe
-straight at the sandbox would mean cross-origin requests, CORS configuration on
-the sandbox, and -- worse -- handing the browser the sandbox's server password
-so it could authenticate.
+directly at the sandbox would hand the browser the sandbox's address and its
+server password, so the traffic is proxied instead and the password stays
+server-side.
 
-Proxying through the API instead makes the iframe same-origin, keeps the
-password server-side, and means the sandbox never has to accept traffic from a
-browser origin at all.
+**Why each sandbox gets its own proxy port rather than a path under the API.**
+The obvious design -- ``/api/sandboxes/{id}/oc/{path}`` -- does not work.
+opencode's UI references its assets with root-absolute URLs::
+
+    <script src="/assets/index-CQtwhDOb.js">
+    <link href="/assets/index-CMLUT3g5.css">
+
+Under a subpath mount the browser resolves those against the API root, not the
+mount point, so every asset 404s and the UI never loads. ``<base href>`` does
+not help: it does not affect URLs that already begin with ``/``, and the bundle
+builds more URLs at runtime anyway.
+
+Giving each sandbox a listener whose *root* is the proxy makes the problem
+disappear -- paths pass through unchanged. The iframe is then a different
+origin from the app shell, which is fine: embedding needs no CORS, and the UI's
+own requests are same-origin with respect to the iframe.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 
 import httpx
-from fastapi import Request, Response
-from fastapi.responses import StreamingResponse
+import uvicorn
+from loguru import logger
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import Response, StreamingResponse
+from starlette.routing import Route
 
-# Hop-by-hop headers must not be forwarded (RFC 9110 7.6.1); `host` has to be
-# dropped so the upstream sees its own, and encoding/length are recomputed.
+# Hop-by-hop headers must not be forwarded (RFC 9110 7.6.1). `host` is dropped
+# so the upstream sees its own; content-length/encoding are recomputed.
 _STRIP_REQUEST = {
     "host", "connection", "keep-alive", "transfer-encoding", "upgrade",
     "proxy-authenticate", "proxy-authorization", "te", "trailer",
-    # Never forward the browser's own auth; we substitute the sandbox's.
+    # Never forward the browser's credentials; the proxy supplies its own.
     "authorization",
 }
 _STRIP_RESPONSE = {
@@ -33,46 +51,96 @@ _STRIP_RESPONSE = {
 }
 
 
-async def proxy_request(request: Request, base_url: str, path: str,
-                        password: str | None) -> Response:
-    """Forward one HTTP request to the sandbox and stream the response back."""
-    url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
-    headers = {k: v for k, v in request.headers.items()
-               if k.lower() not in _STRIP_REQUEST}
-    body = await request.body()
+class SandboxProxy:
+    """A root-path reverse proxy for one sandbox, on its own ephemeral port."""
 
-    client = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0))
-    req = client.build_request(
-        request.method, url,
-        headers=headers,
-        content=body or None,
-        params=dict(request.query_params),
-    )
-    if password:
-        # opencode's server auth is HTTP basic with a fixed username.
-        token = base64.b64encode(f"opencode:{password}".encode()).decode()
-        req.headers["Authorization"] = f"Basic {token}"
+    def __init__(self, base_url: str, password: str | None, host: str = "127.0.0.1"):
+        self.base_url = base_url.rstrip("/")
+        self.password = password
+        self.host = host
+        self.port: int | None = None
+        self._server: uvicorn.Server | None = None
+        self._task: asyncio.Task | None = None
 
-    try:
-        upstream = await client.send(req, stream=True)
-    except httpx.RequestError as exc:
-        await client.aclose()
-        return Response(f"sandbox unreachable: {exc}", status_code=502)
+    @property
+    def url(self) -> str | None:
+        return f"http://{self.host}:{self.port}" if self.port else None
 
-    out_headers = {k: v for k, v in upstream.headers.items()
-                   if k.lower() not in _STRIP_RESPONSE}
+    def _auth_header(self) -> str | None:
+        if not self.password:
+            return None
+        token = base64.b64encode(f"opencode:{self.password}".encode()).decode()
+        return f"Basic {token}"
 
-    async def body_stream():
+    async def _handle(self, request: Request) -> Response:
+        url = f"{self.base_url}/{request.path_params['path'].lstrip('/')}"
+        headers = {k: v for k, v in request.headers.items()
+                   if k.lower() not in _STRIP_REQUEST}
+        body = await request.body()
+
+        client = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0))
+        req = client.build_request(
+            request.method, url, headers=headers,
+            content=body or None, params=dict(request.query_params),
+        )
+        if (auth := self._auth_header()):
+            req.headers["Authorization"] = auth
+
         try:
-            async for chunk in upstream.aiter_raw():
-                yield chunk
-        finally:
-            await upstream.aclose()
+            upstream = await client.send(req, stream=True)
+        except httpx.RequestError as exc:
             await client.aclose()
+            return Response(f"sandbox unreachable: {exc}", status_code=502)
 
-    return StreamingResponse(
-        body_stream(),
-        status_code=upstream.status_code,
-        headers=out_headers,
-        media_type=upstream.headers.get("content-type"),
-    )
+        out_headers = {k: v for k, v in upstream.headers.items()
+                       if k.lower() not in _STRIP_RESPONSE}
+
+        async def body_stream():
+            try:
+                async for chunk in upstream.aiter_raw():
+                    yield chunk
+            finally:
+                await upstream.aclose()
+                await client.aclose()
+
+        return StreamingResponse(
+            body_stream(), status_code=upstream.status_code, headers=out_headers,
+            media_type=upstream.headers.get("content-type"),
+        )
+
+    def _app(self) -> Starlette:
+        methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+        return Starlette(routes=[
+            Route("/{path:path}", self._handle, methods=methods),
+        ])
+
+    async def start(self) -> str:
+        """Bind an ephemeral port and start serving. Returns the proxy URL."""
+        config = uvicorn.Config(
+            self._app(), host=self.host, port=0, log_level="warning",
+            # opencode's UI streams events; buffering would stall the UI.
+            timeout_keep_alive=75,
+        )
+        self._server = uvicorn.Server(config)
+        self._task = asyncio.create_task(self._server.serve())
+
+        # uvicorn publishes the bound socket only once serving has begun.
+        for _ in range(200):
+            if self._server.started and self._server.servers:
+                socks = self._server.servers[0].sockets
+                if socks:
+                    self.port = socks[0].getsockname()[1]
+                    logger.info(f"sandbox proxy listening on {self.url} -> {self.base_url}")
+                    return self.url  # type: ignore[return-value]
+            await asyncio.sleep(0.05)
+        raise RuntimeError("sandbox proxy failed to bind a port")
+
+    async def stop(self) -> None:
+        if self._server is not None:
+            self._server.should_exit = True
+        if self._task is not None:
+            try:
+                await asyncio.wait_for(self._task, timeout=10)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                self._task.cancel()
+        self._server, self._task, self.port = None, None, None

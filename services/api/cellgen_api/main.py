@@ -15,7 +15,6 @@ from loguru import logger
 from pydantic import BaseModel
 
 from cellgen_api.config import settings
-from cellgen_api.proxy import proxy_request
 from cellgen_api.service import SandboxService
 from cellgen_api.store import build_store
 
@@ -124,17 +123,15 @@ async def list_snapshots(sandbox_id: str, request: Request):
             if d.get("sandbox_id") == sandbox_id]
 
 
-@app.api_route(
-    "/api/sandboxes/{sandbox_id}/oc/{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-)
-async def opencode_proxy(sandbox_id: str, path: str, request: Request):
-    """Same-origin route to the sandbox's opencode server.
+@app.get("/api/sandboxes/{sandbox_id}/proxy")
+async def sandbox_proxy_url(sandbox_id: str, request: Request):
+    """Where to point the iframe for this sandbox.
 
-    The iframe talks to this, so the browser never sees the sandbox address or
-    its password.
+    Each running sandbox gets its own root-path proxy on an ephemeral port --
+    opencode's UI loads its assets from absolute paths, so it cannot be served
+    from under a subpath. See proxy.py.
     """
-    handle = service(request).handle(sandbox_id)
-    if handle is None or not handle.base_url:
+    url = service(request).proxy_url(sandbox_id)
+    if url is None:
         raise HTTPException(409, f"sandbox {sandbox_id} is not running")
-    return await proxy_request(request, handle.base_url, path, handle.password)
+    return {"proxy_url": url}

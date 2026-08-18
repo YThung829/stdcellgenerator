@@ -80,6 +80,7 @@ class LocalBackend(SandboxBackend):
             )
         (workdir / "plugins").mkdir(exist_ok=True)
         self._data_home(sandbox_id).mkdir(parents=True, exist_ok=True)
+        await self._ensure_git_repo(workdir)
 
         handle = SandboxHandle(
             id=sandbox_id,
@@ -90,6 +91,31 @@ class LocalBackend(SandboxBackend):
             password=secrets.token_urlsafe(16),
         )
         return await self._start(handle)
+
+    @staticmethod
+    async def _ensure_git_repo(workdir: Path) -> None:
+        """Make the sandbox workdir a git repo.
+
+        opencode identifies a *project* by its git worktree. Without a repo it
+        files every session under the catch-all "global" project rooted at "/",
+        so the UI shows no project and restored sessions have nothing to attach
+        to. A repo also lets the agent diff its own edits.
+        """
+        if (workdir / ".git").exists():
+            return
+        for cmd in (
+            ["git", "init", "-q"],
+            ["git", "add", "-A"],
+            ["git", "-c", "user.email=sandbox@cellgen", "-c", "user.name=CellGen",
+             "commit", "-q", "-m", "Sandbox baseline"],
+        ):
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, cwd=workdir,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+            _, err = await proc.communicate()
+            if proc.returncode != 0:
+                logger.warning(f"{' '.join(cmd)} failed in {workdir}: {err.decode()[:200]}")
+                return
 
     async def _start(self, handle: SandboxHandle) -> SandboxHandle:
         sandbox_id = handle.id

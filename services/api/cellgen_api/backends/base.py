@@ -27,6 +27,23 @@ from enum import Enum
 WORKDIR = "/workspace/engine"
 OPENCODE_PORT = 4096
 
+# Registers the engine's MCP server with the sandbox's opencode, so the agent
+# can ask the live engine what exists and whether a constraint solves instead
+# of inferring both from AGENTS.md. Written into the workdir at sandbox
+# creation; the E2B template bakes in the identical file.
+OPENCODE_CONFIG = {
+    "$schema": "https://opencode.ai/config.json",
+    "mcp": {
+        "cellgen": {
+            "type": "local",
+            # Run as a module so it resolves through the installed engine
+            # rather than a path that differs between backends.
+            "command": ["python", "-m", "src.cellgen.mcp.server"],
+            "enabled": True,
+        }
+    },
+}
+
 
 class SandboxState(str, Enum):
     STARTING = "starting"

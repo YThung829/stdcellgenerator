@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import os
 import secrets
 import shutil
@@ -30,6 +31,7 @@ from pathlib import Path
 from loguru import logger
 
 from cellgen_api.backends.base import (
+    OPENCODE_CONFIG,
     OPENCODE_PORT,
     SandboxBackend,
     SandboxHandle,
@@ -80,6 +82,7 @@ class LocalBackend(SandboxBackend):
             )
         (workdir / "plugins").mkdir(exist_ok=True)
         self._data_home(sandbox_id).mkdir(parents=True, exist_ok=True)
+        self._ensure_opencode_config(workdir)
         await self._ensure_git_repo(workdir)
 
         handle = SandboxHandle(
@@ -104,6 +107,28 @@ class LocalBackend(SandboxBackend):
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         out, err = await proc.communicate()
         return proc.returncode, out.decode(errors="replace"), err.decode(errors="replace")
+
+    @staticmethod
+    def _ensure_opencode_config(workdir: Path) -> None:
+        """Register the engine's MCP server with this workspace's opencode.
+
+        Merged rather than overwritten: the agent may well have written its own
+        settings into this file, and dropping them to install one server would
+        be a poor trade.
+        """
+        path = workdir / "opencode.json"
+        config: dict = {}
+        if path.is_file():
+            try:
+                config = json.loads(path.read_text())
+            except json.JSONDecodeError:
+                logger.warning(f"{path} is not valid JSON; replacing it")
+                config = {}
+
+        mcp = dict(config.get("mcp") or {})
+        mcp.update(OPENCODE_CONFIG["mcp"])
+        config = {**OPENCODE_CONFIG, **config, "mcp": mcp}
+        path.write_text(json.dumps(config, indent=2) + "\n")
 
     @staticmethod
     async def _ensure_git_repo(workdir: Path) -> None:

@@ -41,8 +41,23 @@ WORKDIR /workspace/engine
 COPY engine/ /workspace/engine/
 
 # Installed at build time: resolving ortools inside a live sandbox costs
-# minutes the user would spend staring at an empty UI.
-RUN pip install --no-cache-dir -e /workspace/engine
+# minutes the user would spend staring at an empty UI. The mcp extra brings the
+# server the agent calls to inspect the engine and run smoke solves.
+RUN pip install --no-cache-dir -e "/workspace/engine[mcp]"
+
+# Registers that server with opencode. Kept byte-identical to OPENCODE_CONFIG
+# in services/api/cellgen_api/backends/base.py, which the local backend writes.
+RUN printf '%s\n' \
+    '{' \
+    '  "$schema": "https://opencode.ai/config.json",' \
+    '  "mcp": {' \
+    '    "cellgen": {' \
+    '      "type": "local",' \
+    '      "command": ["python", "-m", "src.cellgen.mcp.server"],' \
+    '      "enabled": true' \
+    '    }' \
+    '  }' \
+    '}' > /workspace/engine/opencode.json
 
 RUN mkdir -p /workspace/engine/plugins /workspace/.local/share \
     && git -C /workspace/engine init -q \
@@ -58,4 +73,5 @@ RUN set -eux; \
     git -C /workspace/engine rev-parse HEAD; \
     test "$XDG_DATA_HOME" = /workspace/.local/share; \
     opencode --version; \
-    cd /workspace/engine && python -c "import src.cellgen.run"
+    cd /workspace/engine && python -c "import src.cellgen.run"; \
+    python -c "import json; json.load(open('/workspace/engine/opencode.json'))"

@@ -26,6 +26,7 @@ from src.cellgen.plugins.loader import (  # noqa: F401
     PluginSelection,
     load,
     load_plugin_dir,
+    load_plugin_file,
     read_manifest,
     resolve_selection,
 )

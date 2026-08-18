@@ -338,12 +338,12 @@ runs         { _id, experiment_id, cell, status, celery_task_id, pid,
 | 2 — 沙盒層（後端） | ✅ 完成 | `services/api/`（backends / state / proxy / service / main） |
 | 3 — Tab 1 前端 | ✅ 完成 | `apps/web/`、後端補 `workspace.py`（plugin 清單 + smoke） |
 | 4 — 導出到 Mongo（Artifact） | ✅ 完成 | `services/api/cellgen_api/artifacts.py`、`tests/test_artifacts.py` |
-| 5 — cellgen MCP server | ⬜ 未開始 | |
+| 5 — cellgen MCP server | ✅ 完成 | `engine/src/cellgen/mcp/`、`tests/test_mcp.py`；沙盒自動寫 `opencode.json` |
 | 6–8 — Tab 2 實驗區 | ⬜ 未開始 | |
 | — 文件 | ✅ 完成 | `README.md`、`docs/manual.md`（每環節附實跑截圖） |
 | **MVP** | ✅ **達成** | 開沙盒 → iframe 內開發 → smoke → 匯出 → 關掉重開對話仍在 |
 
-測試現況：engine 47 passed、api 30 passed；前端 `tsc -b` 與 oxlint 乾淨。
+測試現況：engine 54 passed、api 63 passed；前端 `tsc -b` 與 oxlint 乾淨。
 
 ### 實作中推翻的計劃假設
 
@@ -369,6 +369,12 @@ runs         { _id, experiment_id, cell, status, celery_task_id, pid,
 1. **失敗的重跑會留著上一次的成功產物** — `prepare_output_dir` 只 `mkdir(exist_ok=True)`，而失敗的 solve 不寫 `.res`。於是 INFEASIBLE 的重跑讓前一次的 `.res` 留在原地，對任何「檢查檔案存在」的程式碼來說就是成功。→ 解題前先清掉這些 cell 的舊產物（只清這次要解的 cell，批次共用輸出目錄時不誤傷別人）。
 2. **smoke 會把舊 objective 貼到失敗結果上** — 承上，UI 因此顯示「INFEASIBLE，objective 1021.0」。→ 只有真的解出來才讀 `.res`。
 3. **前端開機時信了過期的 `state`** — 儲存的紀錄活得比服務行程久，API 重啟後它仍寫著 `running` 並帶著上一個 proxy 埠。前端因此跳過重建，iframe 指向沒人在聽的埠，plugin 清單則一路 409。→ 開機改以 `GET /api/sandboxes/{id}` 回報的 `healthy` 為準。
+
+### 沙盒回收與 E2B 整備（項目 1–3）
+
+- **項目 3（沙盒回收）✅** — 閒置逾時自動 pause（先快照，不會掉資料），proxy 流量當作活動訊號，前端 `pagehide` 時 `sendBeacon` 立即釋放。`CELLGEN_IDLE_PAUSE_SECONDS=0` 可關閉。
+- **項目 1（E2B 實測）⛔ 受阻** — 這個開發環境的網路政策擋掉 `api.e2b.dev`（只放行 npm/PyPI/Anthropic），也沒有 `E2B_API_KEY`。**不需要憑證的部分全部做完**：對照已安裝的 SDK 逐一校正 `e2b.py`（`AsyncSandbox.resume` 根本不存在等五個缺陷）、`infra/e2b/` 的 template、以及一組讀取後端原始碼、確認每個 SDK 呼叫都真實存在的測試。
+- **項目 2（真實對話 round-trip）⛔ 受阻** — 需要沙盒內有 model provider key。
 
 ### Commit 歷程
 

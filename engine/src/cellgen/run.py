@@ -289,6 +289,11 @@ def run(
     )
 
     results: dict[str, str] = {}
+    # What each plugin actually did to each cell's model. Measured during the
+    # build and otherwise only ever logged, so it is recorded here to spare
+    # callers a second solve to find out.
+    plugin_deltas: dict[str, list[dict]] = {}
+    seen_records = 0
     for cell in cells:
         log_path = out / "logs" / f"{cell}.log"
         real_stdout = sys.stdout
@@ -313,6 +318,28 @@ def run(
                 sys.stdout = real_stdout
                 logger.remove(sink_id)
                 logger.info(f"{cell}: {results.get(cell, 'ERROR')} in {time.time() - t0:.1f}s")
+        # Sliced rather than drained: `plugins.records()` stays the complete
+        # in-process view its existing callers expect, while each cell still
+        # gets only the deltas measured while building its own model.
+        plugin_deltas[cell] = [
+            {
+                "id": r.id,
+                "stage": r.stage,
+                "params": r.params,
+                "constraints_added": r.constraints_added,
+                "variables_added": r.variables_added,
+            }
+            for r in plugins.records()[seen_records:]
+        ]
+        seen_records = len(plugins.records())
+
+    # Merged into the run record rather than written separately, so a run stays
+    # one directory with one manifest describing it.
+    run_json = out / "run.json"
+    record = json.loads(run_json.read_text())
+    record["results"] = results
+    record["plugin_deltas"] = plugin_deltas
+    run_json.write_text(json.dumps(record, indent=2))
     return results
 
 

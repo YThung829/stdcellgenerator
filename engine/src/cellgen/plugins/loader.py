@@ -45,6 +45,37 @@ class PluginLoadError(Exception):
     """A plugin file could not be imported, or the manifest is inconsistent."""
 
 
+def load_plugin_file(path: Path | str) -> list[registry.ConstraintPlugin]:
+    """Import one plugin file so its decorators register.
+
+    Returns the constraints this file added, which is how the caller tells
+    "registered nothing" and "registered several" apart from success.
+
+    Importing runs the file. That is only ever acceptable inside a sandbox --
+    which is the only place plugins are loaded.
+    """
+    path = Path(path)
+    before = {p.id for p in registry.all_constraints()}
+    module_name = f"cellgen_plugin_{path.stem}"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise PluginLoadError(f"Could not build an import spec for {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        del sys.modules[module_name]
+        raise PluginLoadError(f"Failed to import plugin {path.name}: {exc}") from exc
+
+    new = [p for p in registry.all_constraints() if p.id not in before]
+    for p in new:
+        # Record the file rather than the synthetic module name, so error
+        # messages point at something the user can open.
+        object.__setattr__(p, "source_file", str(path))
+    return new
+
+
 def load_plugin_dir(plugin_dir: Path | str) -> list[registry.ConstraintPlugin]:
     """Import every ``*.py`` in ``plugin_dir`` so its decorators register.
 
@@ -62,25 +93,7 @@ def load_plugin_dir(plugin_dir: Path | str) -> list[registry.ConstraintPlugin]:
     for path in sorted(plugin_dir.glob("*.py")):
         if path.name.startswith("_"):
             continue
-        before = {p.id for p in registry.all_constraints()}
-        module_name = f"cellgen_plugin_{path.stem}"
-        spec = importlib.util.spec_from_file_location(module_name, path)
-        if spec is None or spec.loader is None:
-            raise PluginLoadError(f"Could not build an import spec for {path}")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        try:
-            spec.loader.exec_module(module)
-        except Exception as exc:
-            del sys.modules[module_name]
-            raise PluginLoadError(f"Failed to import plugin {path.name}: {exc}") from exc
-
-        new = [p for p in registry.all_constraints() if p.id not in before]
-        for p in new:
-            # Record the file rather than the synthetic module name, so error
-            # messages point at something the user can open.
-            object.__setattr__(p, "source_file", str(path))
-        loaded.extend(new)
+        loaded.extend(load_plugin_file(path))
 
     logger.info(
         f"Loaded {len(loaded)} constraint plugin(s) from {plugin_dir}: "

@@ -27,7 +27,10 @@ dependencies = [
 [project.optional-dependencies]
 # The PySide6 control GUI is optional: solver workers and sandboxes never need it.
 gui = ["PySide6>=6.6"]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+# The MCP server the sandbox's agent talks to. Not needed to solve a cell, so
+# it stays out of the engine's core dependencies.
+mcp = ["mcp>=2.0"]
 
 [project.scripts]
 # One entry point for a single isolated run; used by the worker and by the
@@ -41,3 +44,6 @@ include = ["src*"]
 testpaths = ["tests"]
 # Solves are slow enough that quiet output is easier to read than progress dots.
 addopts = "-ra"
+# The MCP tests drive a real client session, which is async.
+asyncio_mode = "auto"
+markers = ["slow: runs a real solve; seconds to minutes, not milliseconds"]

@@ -119,6 +119,23 @@ export const api = {
 
   pause: (id: string) => call<Sandbox>(`/api/sandboxes/${id}/pause`, { method: 'POST' }),
 
+  /**
+   * Ask for a pause on the way out, without waiting for the answer.
+   *
+   * `fetch` is cancelled when the page goes away, so a plain call from an
+   * unload handler usually never leaves the browser. `sendBeacon` is handed to
+   * the browser to deliver on its own time. It cannot set headers, so the body
+   * is empty and the endpoint takes none.
+   *
+   * This is an optimisation, not the mechanism: the server reclaims idle
+   * workspaces regardless, which is what covers a crashed tab or a closed
+   * laptop.
+   */
+  pauseOnExit: (id: string): boolean => {
+    if (typeof navigator === 'undefined' || !navigator.sendBeacon) return false
+    return navigator.sendBeacon(`${BASE}/api/sandboxes/${id}/pause`)
+  },
+
   resume: (id: string) => call<Sandbox>(`/api/sandboxes/${id}/resume`, { method: 'POST' }),
 
   destroy: (id: string) =>

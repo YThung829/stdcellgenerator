@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections.abc import Callable
 
 import httpx
 import uvicorn
@@ -58,10 +59,15 @@ _STRIP_RESPONSE = {
 class SandboxProxy:
     """A root-path reverse proxy for one sandbox, on its own ephemeral port."""
 
-    def __init__(self, base_url: str, password: str | None, host: str = "127.0.0.1"):
+    def __init__(self, base_url: str, password: str | None, host: str = "127.0.0.1",
+                 on_activity: Callable[[], None] | None = None):
         self.base_url = base_url.rstrip("/")
         self.password = password
         self.host = host
+        # Traffic through here is the truest signal that someone is using the
+        # workspace: the embedded UI polls constantly while a tab is open, and
+        # goes silent the moment it is not.
+        self.on_activity = on_activity
         self.port: int | None = None
         self._server: uvicorn.Server | None = None
         self._task: asyncio.Task | None = None
@@ -77,6 +83,8 @@ class SandboxProxy:
         return f"Basic {token}"
 
     async def _handle(self, request: Request) -> Response:
+        if self.on_activity is not None:
+            self.on_activity()
         url = f"{self.base_url}/{request.path_params['path'].lstrip('/')}"
         headers = {k: v for k, v in request.headers.items()
                    if k.lower() not in _STRIP_REQUEST}

@@ -108,6 +108,18 @@ export function useSandbox() {
     if (!record || record.state !== 'running' || isStale(record)) ensure.mutate()
   }, [sandbox.isSuccess, record, ensure])
 
+  // Hand the workspace back when the tab goes away. `pagehide` is the event
+  // that actually fires on mobile and on bfcache navigations, where `unload`
+  // does not. The server's idle reaper is the real guarantee -- this just
+  // releases the sandbox immediately instead of one reaper interval later.
+  const ready = record?.state === 'running'
+  useEffect(() => {
+    if (!ready) return
+    const release = () => { api.pauseOnExit(SANDBOX_ID) }
+    window.addEventListener('pagehide', release)
+    return () => window.removeEventListener('pagehide', release)
+  }, [ready])
+
   const isWorking = ensure.isPending || resume.isPending || rebuild.isPending
   const phase = phaseOf(record ?? undefined, isWorking, health.isError)
 

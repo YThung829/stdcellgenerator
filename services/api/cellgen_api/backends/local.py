@@ -157,21 +157,13 @@ class LocalBackend(SandboxBackend):
         handle.meta["pid"] = proc.pid
         handle.meta["log"] = str(log_path)
 
-        if await self._wait_healthy(handle):
+        if await self.wait_healthy(handle):
             handle.state = SandboxState.RUNNING
             logger.info(f"[{sandbox_id}] opencode up at {handle.base_url} (pid {proc.pid})")
         else:
             handle.state = SandboxState.FAILED
             logger.error(f"[{sandbox_id}] opencode did not become healthy; see {log_path}")
         return handle
-
-    async def _wait_healthy(self, handle: SandboxHandle, timeout: float = 60) -> bool:
-        deadline = asyncio.get_event_loop().time() + timeout
-        while asyncio.get_event_loop().time() < deadline:
-            if await self.health(handle):
-                return True
-            await asyncio.sleep(0.4)
-        return False
 
     async def resume(self, handle: SandboxHandle) -> SandboxHandle:
         if await self.health(handle):

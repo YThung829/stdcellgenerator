@@ -112,6 +112,22 @@ class SandboxBackend(abc.ABC):
         except Exception:
             return False
 
+    async def wait_healthy(self, handle: SandboxHandle, timeout: float = 60,
+                           interval: float = 0.4) -> bool:
+        """Poll ``health`` until it passes, or give up.
+
+        opencode takes seconds to start listening, so checking once right after
+        launching it reports every sandbox as failed.
+        """
+        import asyncio
+
+        deadline = asyncio.get_event_loop().time() + timeout
+        while asyncio.get_event_loop().time() < deadline:
+            if await self.health(handle):
+                return True
+            await asyncio.sleep(interval)
+        return False
+
     @staticmethod
     def _auth(handle: SandboxHandle):
         return ("opencode", handle.password) if handle.password else None

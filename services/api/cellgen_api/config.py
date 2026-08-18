@@ -21,6 +21,14 @@ class Settings:
     mongo_url: str | None = os.environ.get("CELLGEN_MONGO_URL") or None
     e2b_api_key: str | None = os.environ.get("E2B_API_KEY") or None
     e2b_template: str = os.environ.get("CELLGEN_E2B_TEMPLATE", "cellgen-engine")
+    # Pause a workspace nobody has touched for this long. Idle sandboxes are
+    # not free -- on E2B they bill for as long as they run -- and pausing is
+    # lossless: it snapshots first, and resuming restores the conversation.
+    # Set to 0 to leave sandboxes running.
+    idle_pause_seconds: float = float(
+        os.environ.get("CELLGEN_IDLE_PAUSE_SECONDS", 30 * 60))
+    reaper_interval_seconds: float = float(
+        os.environ.get("CELLGEN_REAPER_INTERVAL_SECONDS", 60))
     cors_origins: list[str] = None  # type: ignore[assignment]
 
     def __post_init__(self):

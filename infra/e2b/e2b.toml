@@ -1,0 +1,9 @@
+# e2b template config. Build from the repository root so the engine/ COPY
+# resolves:  e2b template build -c infra/e2b/e2b.toml -n cellgen-engine
+template_name = "cellgen-engine"
+dockerfile = "infra/e2b/e2b.Dockerfile"
+
+# A solve is CPU-bound and OR-Tools spawns 8 search workers by default, so a
+# single-core sandbox makes every smoke run feel broken.
+cpu_count = 4
+memory_mb = 4096

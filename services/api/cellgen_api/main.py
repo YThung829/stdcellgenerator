@@ -7,7 +7,8 @@ and a same-origin route to the sandbox's opencode UI.
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,9 +43,21 @@ def build_backend():
 async def lifespan(app: FastAPI):
     store = build_store(settings.mongo_url, settings.store_root)
     backend = build_backend()
-    app.state.service = SandboxService(backend, store, settings.opencode_bin)
+    service = SandboxService(backend, store, settings.opencode_bin)
+    app.state.service = service
     logger.info(f"API up: backend={backend.name} engine={settings.engine_src}")
-    yield
+
+    # Idle workspaces cost money on E2B and leak processes locally, and pausing
+    # loses nothing -- it snapshots first. Started here rather than in the
+    # service so tests get a service that never reclaims behind their back.
+    reaper = asyncio.create_task(service.run_reaper(
+        settings.idle_pause_seconds, settings.reaper_interval_seconds))
+    try:
+        yield
+    finally:
+        reaper.cancel()
+        with suppress(asyncio.CancelledError):
+            await reaper
     # Leave sandboxes running: an API restart should not destroy a user's work.
     logger.info("API shutting down; sandboxes left as-is")
 
@@ -99,6 +112,9 @@ async def create_sandbox(body: CreateSandbox, request: Request):
 
 @app.get("/api/sandboxes/{sandbox_id}")
 async def get_sandbox(sandbox_id: str, request: Request):
+    # An open tab polls this, so it counts as activity in its own right --
+    # otherwise a workspace being watched but not typed into looks idle.
+    service(request).touch(sandbox_id)
     record = await service(request).status(sandbox_id)
     if record is None:
         raise HTTPException(404, f"no such sandbox: {sandbox_id}")

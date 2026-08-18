@@ -8,6 +8,7 @@ pause/resume cycle and must never be read from a stale record.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import asdict
 
@@ -35,6 +36,8 @@ class SandboxService:
         # One root-path proxy per running sandbox; see proxy.py for why the
         # proxy cannot live under a path on this API.
         self._proxies: dict[str, SandboxProxy] = {}
+        # When each workspace was last used, for idle reclamation.
+        self._last_active: dict[str, float] = {}
 
     # -- records ---------------------------------------------------------
     def _record(self, handle: SandboxHandle, **extra) -> dict:
@@ -74,9 +77,66 @@ class SandboxService:
         await self._stop_proxy(handle.id)
         if handle.state is not SandboxState.RUNNING or not handle.base_url:
             return
-        proxy = SandboxProxy(handle.base_url, handle.password)
+        proxy = SandboxProxy(
+            handle.base_url, handle.password,
+            on_activity=lambda sid=handle.id: self.touch(sid),
+        )
         await proxy.start()
         self._proxies[handle.id] = proxy
+
+    # -- activity and reclamation ----------------------------------------
+    def touch(self, sandbox_id: str) -> None:
+        """Mark a workspace as in use, deferring reclamation.
+
+        Kept in memory rather than written to the store: this fires on every
+        proxied request, and the reaper is the only reader.
+        """
+        self._last_active[sandbox_id] = time.time()
+
+    def idle_seconds(self, sandbox_id: str) -> float:
+        """How long since anyone touched this workspace."""
+        return time.time() - self._last_active.get(sandbox_id, 0.0)
+
+    async def reap_idle(self, idle_after: float) -> list[str]:
+        """Pause every running workspace nobody has touched recently.
+
+        Pausing is the right disposal: it snapshots first, so nothing is lost,
+        and the next visit resumes into the same conversation. Returns the ids
+        it paused, which is what makes this testable without waiting on a loop.
+        """
+        if idle_after <= 0:
+            return []
+        paused: list[str] = []
+        for sandbox_id, handle in list(self._handles.items()):
+            if handle.state is not SandboxState.RUNNING:
+                continue
+            if self.idle_seconds(sandbox_id) < idle_after:
+                continue
+            try:
+                logger.info(
+                    f"[{sandbox_id}] idle for "
+                    f"{self.idle_seconds(sandbox_id):.0f}s; pausing"
+                )
+                await self.pause(sandbox_id)
+                paused.append(sandbox_id)
+            except Exception:
+                # One stuck sandbox must not stop the rest being reclaimed.
+                logger.exception(f"[{sandbox_id}] idle pause failed")
+        return paused
+
+    async def run_reaper(self, idle_after: float, interval: float) -> None:
+        """Reclaim idle workspaces forever. Cancelled at shutdown."""
+        if idle_after <= 0:
+            logger.info("idle reclamation disabled")
+            return
+        logger.info(f"reclaiming workspaces idle for {idle_after:.0f}s "
+                    f"(checked every {interval:.0f}s)")
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await self.reap_idle(idle_after)
+            except Exception:
+                logger.exception("idle reaper iteration failed")
 
     async def _stop_proxy(self, sandbox_id: str) -> None:
         proxy = self._proxies.pop(sandbox_id, None)
@@ -102,12 +162,17 @@ class SandboxService:
         live = self._handles.get(sandbox_id)
         if live is not None and await self.backend.health(live):
             logger.info(f"[{sandbox_id}] already running; returning existing sandbox")
+            self.touch(sandbox_id)
             if sandbox_id not in self._proxies:
                 await self._start_proxy(live)
             return self._record(live, restored_sessions=0)
 
         handle = await self.backend.create(sandbox_id)
         self._handles[sandbox_id] = handle
+        # Before the proxy exists, so a workspace is never born already idle:
+        # with no timestamp the reaper would see an infinite idle time and
+        # reclaim it on its first pass.
+        self.touch(sandbox_id)
         await self._start_proxy(handle)
 
         restored = 0
@@ -218,6 +283,7 @@ class SandboxService:
 
         handle = await self.backend.resume(handle)
         self._handles[sandbox_id] = handle
+        self.touch(sandbox_id)
         # The sandbox address changes across a pause/resume cycle, so the
         # proxy is rebuilt rather than reused.
         await self._start_proxy(handle)
@@ -228,6 +294,7 @@ class SandboxService:
         handle = self._handles.pop(sandbox_id, None)
         if handle is not None:
             await self.backend.destroy(handle)
+        self._last_active.pop(sandbox_id, None)
         self.store.delete(SANDBOXES, sandbox_id)
         if not keep_snapshots:
             for doc in self.store.list(SNAPSHOTS):

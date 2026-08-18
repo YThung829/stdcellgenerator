@@ -308,3 +308,49 @@ class TestBundledExamples:
 
         assert objective_of(base / "result" / "INV_X1.res") == \
                objective_of(withp / "result" / "INV_X1.res")
+
+
+class TestContextDoc:
+    """The generated constraint-authoring reference (AGENTS.md).
+
+    Its whole value is being trustworthy, so these tests check it actually
+    reflects the engine rather than a stale hand-edit.
+    """
+
+    def test_generates_for_every_technology(self):
+        from src.cellgen.plugins.context_doc import render
+
+        for tech in ("FinFET", "CFET", "QFET"):
+            text = render(tech)
+            assert f"# Writing a constraint plugin ({tech})" in text
+            assert "inst.edge_vars" in text, f"{tech}: edge_vars missing"
+            assert "opt.AddImplication" in text, f"{tech}: CP-SAT calls missing"
+            assert "lgg.edges()" in text, f"{tech}: grid graph API missing"
+
+    def test_lists_every_stage(self):
+        from src.cellgen.plugins.context_doc import render
+
+        text = render("FinFET")
+        for stage in registry.STAGES:
+            assert f"`{stage}`" in text, f"stage {stage} undocumented"
+
+    def test_documents_real_container_comments(self):
+        """Spot-check that key shapes come from the source, not prose."""
+        from src.cellgen.plugins.context_doc import render
+
+        text = render("FinFET")
+        assert "(tran_name, ci) -> bool var" in text
+        assert "transistor name -> TransistorVar" in text
+
+    def test_committed_agents_md_is_up_to_date(self):
+        """AGENTS.md is generated; regenerating must be a no-op.
+
+        If this fails, run:
+            python -m src.cellgen.plugins.context_doc --tech FinFET -o AGENTS.md
+        """
+        from src.cellgen.plugins.context_doc import render
+
+        committed = (REPO_ROOT / "AGENTS.md").read_text()
+        assert committed == render("FinFET"), (
+            "AGENTS.md is stale -- regenerate it (see this test's docstring)"
+        )

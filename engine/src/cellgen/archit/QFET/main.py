@@ -75,6 +75,7 @@ from src.cellgen.postprocess.visualize_QFET_4T import draw_qfet_layout, load_res
 from src.cellgen.core import accelerate
 from src.cellgen.core import inject
 from src.cellgen.core import placement as plc
+from src.cellgen import plugins
 from src.cellgen.core import routing as rt
 from src.cellgen.core import rule
 from src.cellgen.core.entity import Circuit, Model
@@ -195,6 +196,11 @@ class QFET:
         self._setup_solve_strategy()
         # self._apply_injections()
         self._constrain_top_layer_usage()
+
+        # Last chance for a plugin to touch the model: every built-in
+        # constraint, injection and the top-layer cap are all in place, and the
+        # objective has not been assembled yet.
+        plugins.run_stage(self, "pre_solve")
 
         # 5) solve + write
         self._run_solve()
@@ -380,13 +386,19 @@ class QFET:
         `cell_config["enable_routing"]` is honored for back-compat: when False,
         forces stage to "placement" regardless of `routing_stage`.
         """
+        plugins.run_stage(self, "pre_placement")
         self._placement_constraints()
+        plugins.run_stage(self, "post_placement")
         if not self._cfg_get("enable_routing", True):
             return
         stage = self._cfg_get("routing_stage", "internal")
         if stage == "placement":
             return
+        # post_routing deliberately does not fire in the placement-only stages
+        # above: there are no routing constraints for a plugin to build on.
+        plugins.run_stage(self, "pre_routing")
         self._routing_constraints(include_external_son=(stage == "external"))
+        plugins.run_stage(self, "post_routing")
 
     def _maybe_inject_clusters(self):
         """Apply cluster injection when enabled in the cell config; otherwise no-op."""

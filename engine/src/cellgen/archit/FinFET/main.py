@@ -13,6 +13,7 @@ from src.cellgen.core import accelerate
 from src.cellgen.core import inject
 from src.cellgen.core import pin
 from src.cellgen.core import placement as plc
+from src.cellgen import plugins
 from src.cellgen.core import routing as rt
 from src.cellgen.core import rule
 from src.cellgen.core.entity import Circuit, Model, PinType
@@ -118,6 +119,11 @@ class FinFET:
         self._setup_solve_strategy()
         self._apply_injections()
         self._constrain_top_layer_usage()
+
+        # Last chance for a plugin to touch the model: every built-in
+        # constraint, injection and the top-layer cap are all in place, and the
+        # objective has not been assembled yet.
+        plugins.run_stage(self, "pre_solve")
 
         # 5) solve + write
         self._run_solve()
@@ -282,8 +288,12 @@ class FinFET:
 
     def _build_constraints(self):
         """Emit placement and routing constraints into the CP-SAT model."""
+        plugins.run_stage(self, "pre_placement")
         self._placement_constraints()
+        plugins.run_stage(self, "post_placement")
+        plugins.run_stage(self, "pre_routing")
         self._routing_constraints()
+        plugins.run_stage(self, "post_routing")
 
     def _maybe_inject_clusters(self):
         """Apply cluster injection when enabled in the cell config; otherwise no-op."""

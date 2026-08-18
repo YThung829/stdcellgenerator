@@ -155,6 +155,43 @@ class TestFailureContainment:
         assert proc.returncode == 0, proc.stderr[-2000:]
 
 
+class TestSolveReproducibility:
+    """Characterises what is and is not reproducible, so downstream code knows.
+
+    This is not aspirational -- it records measured behaviour. The web UI's
+    experiment comparison depends on knowing which of these holds.
+    """
+
+    def test_objective_is_reproducible(self, tmp_path):
+        objectives = []
+        for i in range(3):
+            out = tmp_path / f"r{i}"
+            run("FinFET_4T_SH", ["INV_X1"], out, overrides=TIME_CAP)
+            first = (out / "result" / "INV_X1.res").read_text().splitlines()[0]
+            objectives.append(float(first.split(":")[1]))
+        assert len(set(objectives)) == 1, (
+            f"objective is not reproducible across runs: {objectives}. "
+            f"Experiment comparison relies on this being stable."
+        )
+
+    def test_layout_geometry_is_not_guaranteed_reproducible(self, tmp_path):
+        """Equal-cost optima mean geometry can differ between identical runs.
+
+        Documented as a test so nobody later builds a layout diff on the
+        assumption that it is stable. If a future engine change *does* make
+        geometry deterministic, this test still passes -- it only asserts that
+        the objective agrees, and leaves geometry unconstrained.
+        """
+        texts = []
+        for i in range(3):
+            out = tmp_path / f"r{i}"
+            run("FinFET_4T_SH", ["INV_X1"], out, overrides=TIME_CAP)
+            texts.append((out / "result" / "INV_X1.res").read_text())
+
+        objectives = {t.splitlines()[0] for t in texts}
+        assert len(objectives) == 1, "cost must agree even when geometry does not"
+
+
 class TestNetlistParsing:
     def test_scan_cdl_finds_the_bundled_cells(self):
         cells = scan_cdl(REPO_ROOT / "input" / "cdl" / "PROBE_2F4T.cdl")

@@ -39,6 +39,7 @@ from src.cellgen.archit.config import _parse_overrides, generate_config
 from src.cellgen.core.entity import LayerStack
 from src.cellgen.core.errors import SolveFailed
 from src.cellgen.io.presets import parse_preset_dict
+from src.cellgen import plugins
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PRESET_DIR = REPO_ROOT / "input" / "presets"
@@ -208,6 +209,7 @@ def run(
     *,
     overrides: list[str] | None = None,
     flag_log_constraints: bool = False,
+    plugin_dir: Path | str | None = None,
     repo_root: Path = REPO_ROOT,
 ) -> dict[str, str]:
     """Resolve the preset, generate configs, and solve each cell.
@@ -227,6 +229,10 @@ def run(
         )
 
     out = prepare_output_dir(output_dir)
+
+    # Load before any solve so a broken plugin fails the run immediately rather
+    # than after the first cell has already burned solver time.
+    plugins.set_active(plugins.load(plugin_dir))
 
     # Preset overrides first so an explicit --override on the command line wins.
     merged = list(cfg.overrides) + list(overrides or [])
@@ -255,6 +261,10 @@ def run(
                 "layer_file": str(cfg.layer_file),
                 "cells": cells,
                 "overrides": merged,
+                "plugins": [
+                    {"id": s.plugin.id, "stage": s.plugin.stage, "params": s.params}
+                    for s in plugins.active()
+                ],
             },
             indent=2,
         )
@@ -301,6 +311,9 @@ def _parse_args(argv=None):
                    help="Per-run output directory. Always created fresh; configs are regenerated.")
     p.add_argument("--override", action="append", default=[], metavar="KEY[.SUB]=VALUE",
                    help="Cell-config override, repeatable. Applied after the preset's CONFIG_OVERRIDES.")
+    p.add_argument("--plugin-dir", type=Path, default=None,
+                   help="Directory of constraint plugins (*.py plus an optional "
+                        "manifest.json). Without a manifest every plugin found runs.")
     p.add_argument("--flag-log-constraints", action="store_true",
                    help="Dump every CP-SAT constraint to constraint/<cell>.log (can exceed 500 MB).")
     p.add_argument("--list-cells", action="store_true",
@@ -328,6 +341,7 @@ def main(argv=None) -> int:
         output_dir=args.output_dir,
         overrides=args.override,
         flag_log_constraints=args.flag_log_constraints,
+        plugin_dir=args.plugin_dir,
     )
 
     failed = {c: s for c, s in results.items() if s != "ok"}

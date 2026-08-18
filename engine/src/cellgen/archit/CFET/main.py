@@ -58,6 +58,7 @@ from src.cellgen.core import accelerate
 from src.cellgen.core import inject
 from src.cellgen.core import pin
 from src.cellgen.core import routing as rt
+from src.cellgen import plugins
 from src.cellgen.core import rule
 from src.cellgen.core.entity import Circuit, Model
 from src.cellgen.core.errors import SolveFailed
@@ -151,6 +152,11 @@ class CFET:
         # 4) solve setup + TLU constraint
         self._setup_solve_strategy()
         self._constrain_top_layer_usage()
+
+        # Last chance for a plugin to touch the model: every built-in
+        # constraint, injection and the top-layer cap are all in place, and the
+        # objective has not been assembled yet.
+        plugins.run_stage(self, "pre_solve")
 
         # 5) solve + write
         self._run_solve()
@@ -294,13 +300,18 @@ class CFET:
 
     def _build_constraints(self):
         """Emit placement and routing constraints into the CP-SAT model."""
+        plugins.run_stage(self, "pre_placement")
         self._placement_constraints()
         # ^ Placement Injection - config values are physical coords (from .res
         # files); x_var uses column indices, so divide by PC pitch to convert.
         pc_pitch = self.c_tech.get_pitch(layer_name="PC")
         for t in self._cfg_get("inject_placement", []):
             inject.inject_placement(self, tran_name=t[0], x=int(t[1] / pc_pitch))
+        # Fires after the injections so a plugin sees the fully pinned placement.
+        plugins.run_stage(self, "post_placement")
+        plugins.run_stage(self, "pre_routing")
         self._routing_constraints()
+        plugins.run_stage(self, "post_routing")
 
     def _maybe_inject_clusters(self):
         """Apply cluster injection when enabled in the cell config; otherwise no-op."""

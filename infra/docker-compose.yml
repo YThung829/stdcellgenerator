@@ -1,0 +1,98 @@
+# The whole stack: store, broker, API, worker, web.
+#
+#   docker compose -f infra/docker-compose.yml up --build
+#
+# The engine is mounted rather than baked in so a solve runs the checkout you
+# are working on. Sandboxes are a separate matter: with CELLGEN_BACKEND=local
+# the API starts opencode inside its own container, which is fine for a single
+# user but has no isolation -- point it at E2B (and the template in
+# infra/e2b/) for anything shared.
+
+name: cellgen
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Celery's queue is the only state here and a lost queue is recoverable
+    # (runs are re-dispatchable), so persistence buys nothing.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mongo: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    environment:
+      CELLGEN_MONGO_URL: mongodb://mongo:27017
+      CELLGEN_REDIS_URL: redis://redis:6379/0
+      CELLGEN_ENGINE_SRC: /app/engine
+      CELLGEN_DATA_ROOT: /data
+      CELLGEN_CORS_ORIGINS: http://localhost:5173
+    volumes:
+      - ../engine:/app/engine
+      - cellgen-data:/data
+    ports:
+      - "8000:8000"
+    command:
+      - uvicorn
+      - cellgen_api.main:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --app-dir=/app/services/api
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis: {condition: service_healthy}
+    environment:
+      CELLGEN_MONGO_URL: mongodb://mongo:27017
+      CELLGEN_REDIS_URL: redis://redis:6379/0
+      CELLGEN_ENGINE_SRC: /app/engine
+      CELLGEN_DATA_ROOT: /data
+      CELLGEN_RUN_ROOT: /data/runs
+      # OR-Tools runs this many search workers per solve; the worker's own
+      # concurrency is derived from it so solves do not fight for cores.
+      CELLGEN_SOLVER_WORKERS: "8"
+    volumes:
+      - ../engine:/app/engine
+      - cellgen-data:/data
+    working_dir: /app/services/worker
+    command: ["celery", "-A", "cellgen_worker.tasks", "worker", "--loglevel=INFO"]
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/web.Dockerfile
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      VITE_API_BASE: http://localhost:8000
+    ports:
+      - "5173:5173"
+
+volumes:
+  mongo-data:
+  cellgen-data:

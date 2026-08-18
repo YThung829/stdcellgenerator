@@ -339,11 +339,12 @@ runs         { _id, experiment_id, cell, status, celery_task_id, pid,
 | 3 — Tab 1 前端 | ✅ 完成 | `apps/web/`、後端補 `workspace.py`（plugin 清單 + smoke） |
 | 4 — 導出到 Mongo（Artifact） | ✅ 完成 | `services/api/cellgen_api/artifacts.py`、`tests/test_artifacts.py` |
 | 5 — cellgen MCP server | ✅ 完成 | `engine/src/cellgen/mcp/`、`tests/test_mcp.py`；沙盒自動寫 `opencode.json` |
-| 6–8 — Tab 2 實驗區 | ⬜ 未開始 | |
+| 6 — Tab 2 後端（Celery） | ✅ 完成 | `services/worker/`、`experiments.py`、`runlog.py`、`infra/docker-compose.yml` |
+| 7–8 — Tab 2 前端 / plugin 化階段二 | ⬜ 未開始 | |
 | — 文件 | ✅ 完成 | `README.md`、`docs/manual.md`（每環節附實跑截圖） |
 | **MVP** | ✅ **達成** | 開沙盒 → iframe 內開發 → smoke → 匯出 → 關掉重開對話仍在 |
 
-測試現況：engine 54 passed、api 63 passed；前端 `tsc -b` 與 oxlint 乾淨。
+測試現況：engine 54 passed、api 95 passed、worker 18 passed；前端 `tsc -b` 與 oxlint 乾淨。
 
 ### 實作中推翻的計劃假設
 

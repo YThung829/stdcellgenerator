@@ -9,14 +9,18 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
 
 from cellgen_api.artifacts import ArtifactError
 from cellgen_api.config import settings
+from cellgen_api.experiments import ExperimentService, ExperimentSpec
+from cellgen_api.runlog import follow
 from cellgen_api.service import SandboxService
 from cellgen_api.store import build_store
 
@@ -45,6 +49,9 @@ async def lifespan(app: FastAPI):
     backend = build_backend()
     service = SandboxService(backend, store, settings.opencode_bin)
     app.state.service = service
+    # Shares the store with the sandbox service: an artifact exported from a
+    # workspace is what an experiment runs.
+    app.state.experiments = ExperimentService(store)
     logger.info(f"API up: backend={backend.name} engine={settings.engine_src}")
 
     # Idle workspaces cost money on E2B and leak processes locally, and pausing
@@ -74,6 +81,10 @@ app.add_middleware(
 
 def service(request: Request) -> SandboxService:
     return request.app.state.service
+
+
+def experiments(request: Request) -> ExperimentService:
+    return request.app.state.experiments
 
 
 class CreateSandbox(BaseModel):
@@ -228,3 +239,105 @@ async def get_artifact(artifact_id: str, request: Request):
     if artifact is None:
         raise HTTPException(404, f"no such artifact: {artifact_id}")
     return artifact.to_dict()
+
+
+# ---------------------------------------------------------------- experiments
+
+
+class CreateExperiment(BaseModel):
+    name: str
+    preset: str
+    cells: list[str]
+    artifact_id: str | None = None
+    description: str = ""
+    overrides: list[str] = []
+    # Always applied: the engine's own default is no limit at all.
+    max_time: int = 300
+
+
+@app.post("/api/experiments", status_code=201)
+async def create_experiment(body: CreateExperiment, request: Request):
+    """Queue one run per cell.
+
+    Returns immediately with every run `pending`. Dispatch failures do not
+    fail the request -- the runs are recorded with the reason so they can be
+    re-sent -- because losing the experiment would be worse than delaying it.
+    """
+    try:
+        return experiments(request).create(ExperimentSpec(**body.model_dump()))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.get("/api/experiments")
+async def list_experiments(request: Request):
+    return experiments(request).list()
+
+
+@app.get("/api/experiments/{experiment_id}")
+async def get_experiment(experiment_id: str, request: Request):
+    experiment = experiments(request).get(experiment_id)
+    if experiment is None:
+        raise HTTPException(404, f"no such experiment: {experiment_id}")
+    return experiment
+
+
+@app.post("/api/experiments/{experiment_id}/cancel")
+async def cancel_experiment(experiment_id: str, request: Request):
+    if experiments(request).get(experiment_id) is None:
+        raise HTTPException(404, f"no such experiment: {experiment_id}")
+    return experiments(request).cancel_experiment(experiment_id)
+
+
+@app.get("/api/runs/{run_id}")
+async def get_run(run_id: str, request: Request):
+    run = experiments(request).run(run_id)
+    if run is None:
+        raise HTTPException(404, f"no such run: {run_id}")
+    return run
+
+
+@app.post("/api/runs/{run_id}/cancel")
+async def cancel_run(run_id: str, request: Request):
+    try:
+        return experiments(request).cancel_run(run_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.get("/api/runs/{run_id}/log")
+async def stream_run_log(run_id: str, request: Request):
+    """Follow a run's log: everything so far, then each line as it lands.
+
+    Server-sent events, so the browser reconnects on its own and an ordinary
+    proxy does not break it.
+    """
+    run = experiments(request).run(run_id)
+    if run is None:
+        raise HTTPException(404, f"no such run: {run_id}")
+
+    log_path = run.get("artifacts", {}).get("log")
+    return StreamingResponse(
+        follow(run_id, Path(log_path) if log_path else None),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # nginx buffers event streams by default, which defeats the point.
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/api/runs/{run_id}/artifacts/{kind}")
+async def download_run_artifact(run_id: str, kind: str, request: Request):
+    """Serve one of a run's output files (`res`, `var`, `png`, `gds`, `log`)."""
+    run = experiments(request).run(run_id)
+    if run is None:
+        raise HTTPException(404, f"no such run: {run_id}")
+
+    path = (run.get("artifacts") or {}).get(kind)
+    if not path or not Path(path).is_file():
+        raise HTTPException(404, f"run {run_id} has no {kind!r} artifact")
+    return FileResponse(path, filename=f"{run.get('cell', run_id)}.{kind}")

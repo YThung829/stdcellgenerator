@@ -120,6 +120,28 @@ class TestPerRunIsolation:
         seed = json.loads((tmp_path / "config" / "INV_X1.json").read_text())["seed"]["value"]
         assert seed == 7, "second run reused the first run's config JSON"
 
+    def test_failed_rerun_does_not_leave_the_previous_result(self, tmp_path):
+        """A failure must not inherit the prior run's success artifacts.
+
+        A failed solve writes no `.res`, so leaving the old one behind makes
+        the failure look like a success to anything that checks for the file.
+        """
+        run("FinFET_4T_SH", ["INV_X1"], tmp_path, overrides=TIME_CAP)
+        assert (tmp_path / "result" / "INV_X1.res").is_file()
+
+        results = run("FinFET_4T_SH", ["INV_X1"], tmp_path,
+                      overrides=[*TIME_CAP, "MPO=8"])
+        assert results["INV_X1"] != "ok"
+        assert not (tmp_path / "result" / "INV_X1.res").exists()
+        assert not (tmp_path / "result" / "INV_X1.var").exists()
+
+    def test_clearing_is_scoped_to_the_cells_being_run(self, tmp_path):
+        """A batch sharing one output dir keeps results it is not rebuilding."""
+        run("FinFET_4T_SH", ["INV_X1"], tmp_path, overrides=TIME_CAP)
+        run("FinFET_4T_SH", ["NAND2_X1"], tmp_path, overrides=TIME_CAP)
+        assert (tmp_path / "result" / "INV_X1.res").is_file()
+        assert (tmp_path / "result" / "NAND2_X1.res").is_file()
+
 
 class TestFailureContainment:
     """A failing cell must not take down the process or the rest of the batch."""

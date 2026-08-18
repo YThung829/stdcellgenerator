@@ -336,13 +336,14 @@ runs         { _id, experiment_id, cell, status, celery_task_id, pid,
 | 1 — Plugin 掛點 | ✅ 完成 | `engine/src/cellgen/plugins/`、`tests/test_plugins.py`、`plugins/examples/` |
 | 1.5 — Context 文件產生器 | ✅ 完成 | `engine/src/cellgen/plugins/context_doc.py` → `engine/AGENTS.md` |
 | 2 — 沙盒層（後端） | ✅ 完成 | `services/api/`（backends / state / proxy / service / main） |
-| 3 — Tab 1 前端 | ⬜ 未開始 | `apps/web/` |
+| 3 — Tab 1 前端 | ✅ 完成 | `apps/web/`、後端補 `workspace.py`（plugin 清單 + smoke） |
 | 4 — 導出到 Mongo（Artifact） | ✅ 完成 | `services/api/cellgen_api/artifacts.py`、`tests/test_artifacts.py` |
 | 5 — cellgen MCP server | ⬜ 未開始 | |
 | 6–8 — Tab 2 實驗區 | ⬜ 未開始 | |
 | — 文件 | ✅ 完成 | `README.md`、`docs/manual.md`（每環節附實跑截圖） |
+| **MVP** | ✅ **達成** | 開沙盒 → iframe 內開發 → smoke → 匯出 → 關掉重開對話仍在 |
 
-測試現況：engine 45 passed、api 22 passed。
+測試現況：engine 47 passed、api 30 passed；前端 `tsc -b` 與 oxlint 乾淨。
 
 ### 實作中推翻的計劃假設
 
@@ -360,6 +361,14 @@ runs         { _id, experiment_id, cell, status, celery_task_id, pid,
 2. **重複建立同一個沙盒會打死原本那個** — 沙盒的 opencode 埠由 id 推導，第二個程序綁不上就 `FAILED`，同時把原本的 proxy 停掉。前端每次重連都會打這支 API。→ id 已在跑就直接回傳既有沙盒。
 3. **匯出的 patch 夾帶 solver 產出** — engine 的 `.gitignore` 只擋 `output/`，沒擋 `--output-dir` 慣用的 `runs/`。一次 solve 就讓 artifact 從 1.1 KB 漲到 222 KB。→ `runs/` 加進 engine `.gitignore`。
 4. **`--list-cells` 強制要求 `--output-dir`** — 只是列 netlist 裡的 cell，卻要先指定一個不會被寫入的目錄。→ 改成解題時才必填。
+
+### 做 Phase 3 時發現的三個缺陷
+
+同樣都已修好並補上先確認會失敗的回歸測試。
+
+1. **失敗的重跑會留著上一次的成功產物** — `prepare_output_dir` 只 `mkdir(exist_ok=True)`，而失敗的 solve 不寫 `.res`。於是 INFEASIBLE 的重跑讓前一次的 `.res` 留在原地，對任何「檢查檔案存在」的程式碼來說就是成功。→ 解題前先清掉這些 cell 的舊產物（只清這次要解的 cell，批次共用輸出目錄時不誤傷別人）。
+2. **smoke 會把舊 objective 貼到失敗結果上** — 承上，UI 因此顯示「INFEASIBLE，objective 1021.0」。→ 只有真的解出來才讀 `.res`。
+3. **前端開機時信了過期的 `state`** — 儲存的紀錄活得比服務行程久，API 重啟後它仍寫著 `running` 並帶著上一個 proxy 埠。前端因此跳過重建，iframe 指向沒人在聽的埠，plugin 清單則一路 409。→ 開機改以 `GET /api/sandboxes/{id}` 回報的 `healthy` 為準。
 
 ### Commit 歷程
 

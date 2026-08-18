@@ -6,7 +6,7 @@
 CP-SAT——名字裡的 "SMT" 是歷史遺留)。這個專案在它外面包了兩層:
 
 * **開發區(Tab 1)** — 一個可拋棄的沙盒,裡面跑 opencode。用自然語言寫 constraint、
-  當場跑小測資驗證,再把成果匯出成 artifact。
+  當場跑小測資驗證,再把成果匯出成 artifact。**MVP 已完成。**
 * **實驗區(Tab 2)** — 匯入 artifact,對一批 cell 跑 CP-SAT,比對指標。*(尚未開始)*
 
 完整的設計與決策記錄在 [`docs/plan.md`](docs/plan.md)。
@@ -21,10 +21,22 @@ CP-SAT——名字裡的 "SMT" 是歷史遺留)。這個專案在它外面包了
 |---|---|
 | `engine/` — CP-SAT 引擎、單一 CLI 入口、constraint plugin 層 | ✅ 可用 |
 | `services/api/` — 沙盒生命週期、狀態快照、opencode 反向代理、artifact 匯出 | ✅ 可用 |
-| `apps/web/` — Tab 1 前端 | ⬜ 未開始 |
+| `apps/web/` — Tab 1 前端 | ✅ 可用 |
 | `services/worker/` — Tab 2 批次執行 | ⬜ 未開始 |
 
-測試:engine 45 passed、api 22 passed。
+測試:engine 47 passed、api 30 passed。
+
+### 開發區(Tab 1)
+
+```bash
+uvicorn cellgen_api.main:app --port 8000 --app-dir services/api   # 後端
+cd apps/web && npm install && npm run dev                          # 前端
+```
+
+![Tab 1 開發區](docs/images/tab1-studio.png)
+
+左邊是 iframe 裝著沙盒的 opencode;右邊看得到 agent 寫出來的 plugin(顯示的是
+manifest 實際生效的參數)、按一下就跑的 smoke 驗證,以及匯出。
 
 ### 引擎:一條指令解一顆 cell
 

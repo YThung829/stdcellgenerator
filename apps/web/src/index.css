@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+/* The engine is a solver: dense, monospaced readouts suit it better than a
+   marketing-weight type scale. */
+@theme {
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html, body, #root { height: 100%; }

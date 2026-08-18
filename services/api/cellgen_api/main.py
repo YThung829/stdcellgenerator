@@ -73,6 +73,14 @@ class ExportArtifact(BaseModel):
     description: str = ""
 
 
+class RunSmoke(BaseModel):
+    """All optional: the defaults are the engine's own smoke-test cell."""
+
+    cell: str | None = None
+    preset: str | None = None
+    max_time: int | None = None
+
+
 @app.get("/api/health")
 async def health():
     return {"ok": True, "backend": settings.backend}
@@ -141,6 +149,35 @@ async def sandbox_proxy_url(sandbox_id: str, request: Request):
     if url is None:
         raise HTTPException(409, f"sandbox {sandbox_id} is not running")
     return {"proxy_url": url}
+
+
+@app.get("/api/sandboxes/{sandbox_id}/plugins")
+async def sandbox_plugins(sandbox_id: str, request: Request):
+    """The constraint plugins currently in this sandbox.
+
+    Read from the sandbox on every call: the agent edits these files directly,
+    so anything cached here would be stale as soon as it does.
+    """
+    try:
+        return await service(request).plugins(sandbox_id)
+    except KeyError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post("/api/sandboxes/{sandbox_id}/smoke")
+async def sandbox_smoke(body: RunSmoke, sandbox_id: str, request: Request):
+    """Solve one small cell with this sandbox's plugins loaded.
+
+    The inner loop of constraint authoring: does the engine still solve, and
+    at what objective. Compare objectives, never layouts -- see
+    docs/solve-reproducibility.md.
+    """
+    try:
+        return await service(request).smoke(
+            sandbox_id, cell=body.cell, preset=body.preset,
+            max_time=body.max_time)
+    except KeyError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @app.post("/api/sandboxes/{sandbox_id}/export", status_code=201)

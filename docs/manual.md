@@ -2,14 +2,14 @@
 
 從零到「把一條 constraint 匯出成可跑實驗的 artifact」。
 
-前端(Tab 1)還沒開始做,所以現在的操作介面是 CLI 與 HTTP API;文中每張截圖都是實際
-跑出來的輸出。等 `apps/web/` 完成後,這些 API 呼叫會被按鈕取代,但流程本身不變。
+日常操作都在 Tab 1 的網頁介面上;這份手冊同時給出底下對應的 HTTP 呼叫,因為那是
+出問題時真正要看的東西。文中每張截圖都是實際跑出來的畫面與輸出。
 
 **目錄**
 
 1. [安裝](#1-安裝)
 2. [跑一次 solve](#2-跑一次-solve)
-3. [啟動 API](#3-啟動-api)
+3. [啟動服務](#3-啟動服務)
 4. [開一個沙盒](#4-開一個沙盒)
 5. [在沙盒內開發 constraint](#5-在沙盒內開發-constraint)
 6. [匯出成 artifact](#6-匯出成-artifact)
@@ -86,14 +86,27 @@ python -m src.cellgen.run --preset FinFET_4T_SH --cell INV_X1 --output-dir runs/
 
 ---
 
-## 3. 啟動 API
+## 3. 啟動服務
+
+兩個行程:後端與前端。
 
 ```bash
+# 後端
 CELLGEN_OPENCODE_BIN=$(which opencode) \
   uvicorn cellgen_api.main:app --port 8000 --app-dir services/api
+
+# 前端(另一個終端)
+cd apps/web && npm install && npm run dev
 ```
 
-開 <http://localhost:8000/docs> 看互動式 API 文件:
+開 <http://localhost:5173> 就是開發區:
+
+![Tab 1 開發區](images/tab1-studio.png)
+
+前端固定用 5173 埠且不自動改埠——那是 API 預設允許的 CORS 來源,讓 Vite 悄悄換到
+5174 只會讓每一支呼叫失敗。要改 API 位址就設 `VITE_API_BASE`。
+
+<http://localhost:8000/docs> 是互動式 API 文件:
 
 ![API 端點](images/api-docs.png)
 
@@ -136,7 +149,7 @@ curl -sX POST localhost:8000/api/sandboxes -d '{"sandbox_id": "demo"}'
 
 ### 開啟 opencode
 
-把瀏覽器指向回傳的 `proxy_url`(前端未來會用 iframe 裝這個):
+Tab 1 會把回傳的 `proxy_url` 裝進 iframe。單獨打開它也是同一個畫面:
 
 ![opencode UI](images/opencode-ui.png)
 
@@ -200,6 +213,15 @@ def max_vias_per_col(inst, params):
 
 ### 當場驗證
 
+側欄的「跑 smoke」按鈕就是這件事:用目前的 plugin 解一顆 INV_X1,回報 status 與
+objective。它顯示的參數是 **manifest 實際生效的值**,不是 decorator 的預設值——
+上圖那條顯示 `max_vias=3`,而檔案裡寫的預設是 2。
+
+失敗也看得見:plugin 太緊會回 `INFEASIBLE`,語法壞掉的檔案仍然列在清單上並附上錯誤,
+不會靜靜消失。
+
+底下等價的指令是:
+
 ```bash
 cd .cellgen/sandboxes/demo/engine
 python -m src.cellgen.run --preset FinFET_4T_SH --cell INV_X1 \
@@ -219,7 +241,8 @@ python -m src.cellgen.run --preset FinFET_4T_SH --cell INV_X1 \
 
 ## 6. 匯出成 artifact
 
-沙盒不能 push,也碰不到上游 engine。工作離開沙盒的唯一路徑是匯出成檔案:
+沙盒不能 push,也碰不到上游 engine。工作離開沙盒的唯一路徑是匯出成檔案:側欄「匯出」
+輸入一個名字按下去,或者:
 
 ```bash
 curl -sX POST localhost:8000/api/sandboxes/demo/export \
@@ -255,6 +278,10 @@ curl -s localhost:8000/api/artifacts/art_18277d1601b4   # 含完整原始碼與 
 ## 7. 關掉再打開:狀態還原
 
 這是 MVP 的核心承諾:沙盒可以被回收,但下次打開必須完整還原歷史對話。
+
+狀態列上的「暫停」/「恢復」就是這組操作:
+
+![已暫停的工作區](images/tab1-paused.png)
 
 ```bash
 curl -sX POST localhost:8000/api/sandboxes/demo/pause
@@ -318,6 +345,9 @@ constraint 複製成了自己的 private method。plugin 的 `tech=[...]` 標註
 
 ## 接下來
 
-前端(Phase 3)是擋在 MVP 前面的唯一一塊。之後是沙盒內的 MCP server(Phase 5),
-讓 opencode 能直接呼叫 `run_smoke` / `describe_context` / `validate_constraint`
-而不是自己猜。再往後是 Tab 2 實驗區。進度表在 [`plan.md`](plan.md)。
+MVP 已經完整:開沙盒 → 在 iframe 裡開發 constraint → 跑 smoke 驗證 → 匯出 →
+關掉重開對話還在。
+
+下一步是沙盒內的 MCP server(Phase 5),讓 opencode 能直接呼叫 `run_smoke` /
+`describe_context` / `validate_constraint`,而不是自己猜有哪些變數可用。再往後是
+Tab 2 實驗區。進度表在 [`plan.md`](plan.md)。

@@ -9,6 +9,7 @@ pause/resume cycle and must never be read from a stale record.
 from __future__ import annotations
 
 import time
+from dataclasses import asdict
 
 from loguru import logger
 
@@ -17,6 +18,7 @@ from cellgen_api.backends.base import SandboxBackend, SandboxHandle, SandboxStat
 from cellgen_api.proxy import SandboxProxy
 from cellgen_api.state import SandboxSnapshot, SandboxStateStore
 from cellgen_api.store import Store, new_id
+from cellgen_api.workspace import list_plugins, run_smoke
 
 SANDBOXES = "sandboxes"
 SNAPSHOTS = "snapshots"
@@ -162,6 +164,26 @@ class SandboxService:
             "changed_files": artifact.changed_files,
             "size_bytes": artifact.size_bytes,
         })
+
+    async def plugins(self, sandbox_id: str) -> dict:
+        """What is in the sandbox's plugin directory right now."""
+        return await list_plugins(self.backend, self._require_handle(sandbox_id))
+
+    async def smoke(self, sandbox_id: str, cell: str | None = None,
+                    preset: str | None = None, max_time: int | None = None) -> dict:
+        """Solve one small cell in the sandbox to check its plugins still work."""
+        handle = self._require_handle(sandbox_id)
+        kwargs = {k: v for k, v in
+                  {"cell": cell, "preset": preset, "max_time": max_time}.items()
+                  if v is not None}
+        result = await run_smoke(self.backend, handle, **kwargs)
+        doc = {"sandbox_id": sandbox_id, "finished_at": time.time(),
+               **asdict(result)}
+        # Kept on the sandbox record so the UI can show the last result
+        # immediately on load, without re-running a solve.
+        self.store.put(SANDBOXES, sandbox_id,
+                       {**(self.get_record(sandbox_id) or {}), "last_smoke": doc})
+        return doc
 
     def list_artifacts(self) -> list[dict]:
         return self.store.list(ARTIFACTS)

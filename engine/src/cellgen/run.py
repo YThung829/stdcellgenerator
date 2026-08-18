@@ -30,6 +30,7 @@ import json
 import os
 import sys
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -144,6 +145,22 @@ def prepare_output_dir(output_dir: Path) -> Path:
     return output_dir
 
 
+def clear_cell_artifacts(output_dir: Path, cells: Iterable[str]) -> None:
+    """Delete any previous results for these cells.
+
+    A failed solve writes no result, so without this a re-run into the same
+    directory leaves the *previous* run's `.res` and layout sitting there --
+    reading as success to anything that checks for the file afterwards.
+    Scoped to the named cells so an output directory shared by a batch keeps
+    the results of cells this run is not touching.
+    """
+    for cell in cells:
+        for rel in (f"result/{cell}.res", f"result/{cell}.var",
+                    f"view/{cell}.png", f"view/{cell}.glb",
+                    f"logs/{cell}.log", f"constraint/{cell}.log"):
+            (output_dir / rel).unlink(missing_ok=True)
+
+
 def solve_cell(
     cfg: RunConfig,
     cell: str,
@@ -229,6 +246,7 @@ def run(
         )
 
     out = prepare_output_dir(output_dir)
+    clear_cell_artifacts(out, cells)
 
     # Load before any solve so a broken plugin fails the run immediately rather
     # than after the first cell has already burned solver time.

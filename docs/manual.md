@@ -296,6 +296,48 @@ curl -s localhost:8000/api/artifacts/art_18277d1601b4   # 含完整原始碼與 
 
 ---
 
+## 6.5 artifact 怎麼進到 Tab 2 實驗區
+
+匯出只是把工作存下來,真正把它跑起來的是實驗區。中間沒有第二個匯入步驟——建實驗時
+挑一個 artifact 就是了。
+
+```bash
+curl -sX POST localhost:8000/api/experiments -H 'content-type: application/json' -d '{
+  "name": "max-vias sweep",
+  "artifact_id": "art_18277d1601b4",
+  "preset": "FinFET_4T_SH",
+  "cells": ["INV_X1", "NAND2_X1"],
+  "overrides": [],
+  "max_time": 300
+}'
+```
+
+一個 cell 一個 run,立刻回傳,每個 run 都是 `pending`。前端「新實驗」表單送的就是這支 API。
+
+worker 拿到 run 之後,`RunExecutor.prepare()` 依 artifact 的內容決定怎麼佈置工作區——
+這是兩條不同的路徑,差別會直接反映在你等多久:
+
+| artifact 內容 | 怎麼跑 | 為什麼 |
+|---|---|---|
+| **只有 plugin**(`patch_bytes` 是 0) | 共用的 engine checkout + 這個 run 自己的 `plugins/` 目錄 | 每個 run 複製一份 checkout 的成本會蓋過一次短 solve 本身 |
+| **帶 patch** | 這個 run 自己複製一份 engine,再 `git apply` | patch 會改到 engine 本體,套在共用 checkout 上會污染同時在跑的其他 run |
+
+最後兩者都收斂到同一條命令:
+
+```
+python -m src.cellgen.run --preset <preset> --cell <cell> \
+       --output-dir <run>/output --plugin-dir <run>/plugins \
+       --override max_time.value=true --override max_time.time=<max_time>
+```
+
+**patch 套不上**時 run 會是 `ERROR`,訊息裡帶著 artifact 的 `engine_baseline`。那代表
+worker 這邊的 engine checkout 跟你當初匯出時的不是同一版——不是 patch 壞了。
+
+Redis 或 worker 沒起來時,實驗照樣建得起來,run 停在 `pending` 並附上 `dispatch_error`。
+不會默默消失,補起 worker 之後重送即可。
+
+---
+
 ## 7. 關掉再打開:狀態還原
 
 這是 MVP 的核心承諾:沙盒可以被回收,但下次打開必須完整還原歷史對話。
@@ -369,6 +411,9 @@ constraint 複製成了自己的 private method。plugin 的 `tech=[...]` 標註
 MVP 已經完整:開沙盒 → 在 iframe 裡開發 constraint → 跑 smoke 驗證 → 匯出 →
 關掉重開對話還在。
 
-下一步是沙盒內的 MCP server(Phase 5),讓 opencode 能直接呼叫 `run_smoke` /
-`describe_context` / `validate_constraint`,而不是自己猜有哪些變數可用。再往後是
-Tab 2 實驗區。進度表在 [`plan.md`](plan.md)。
+Phase 0–8 都已完成:沙盒內的 MCP server 讓 opencode 直接呼叫 `run_smoke` /
+`describe_context` / `validate_constraint` 而不是自己猜;Tab 2 實驗區能把匯出的 artifact
+批次跑成 run。進度表在 [`plan.md`](plan.md)。
+
+還沒被真實環境驗證過的只剩 E2B backend——要在私有環境接上去,照
+[`e2b-bringup.md`](e2b-bringup.md)。

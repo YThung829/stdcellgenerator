@@ -100,6 +100,8 @@ data dir 是 308 KB。細節見 [`docs/opencode-state-spike.md`](docs/opencode-s
 
 ## 上手
 
+* **[部署與啟動](docs/deploy.md)** — 拉到自己環境要怎麼跑起來。有本機 opencode 就
+  不需要 E2B。
 * **[使用手冊](docs/manual.md)** — 從安裝到匯出 artifact 的完整流程,每步都有截圖。
 * **[開發計劃](docs/plan.md)** — 架構、已確認的決策、各階段進度。
 * **[寫一條 constraint plugin](engine/AGENTS.md)** — `@constraint` 介面、`inst` 上所有

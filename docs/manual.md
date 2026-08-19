@@ -120,6 +120,27 @@ cd apps/web && npm install && npm run dev
 | `CELLGEN_OPENCODE_BIN` | PATH 上的 `opencode` | opencode 執行檔 |
 | `CELLGEN_MONGO_URL` | 未設 | 設了就用 MongoDB,連不上會退回檔案儲存 |
 | `E2B_API_KEY` | 未設 | `e2b` backend 必需 |
+| `CELLGEN_E2B_TEMPLATE` | `cellgen-engine` | E2B template 名稱(要先 build,見 `infra/e2b/`) |
+| `CELLGEN_SANDBOX_ENV` | 未設 | 額外要轉發進沙盒的環境變數名,逗號分隔 |
+| `CELLGEN_IDLE_PAUSE_SECONDS` | `1800` | 閒置多久自動暫停;`0` 關閉 |
+| `CELLGEN_REDIS_URL` | `redis://127.0.0.1:6379/0` | Tab 2 的 broker |
+
+### 沙盒裡的 agent 需要一把 model provider key
+
+**沒有 key,沙盒會健康地啟動,然後一條 constraint 都寫不出來**——這是唯一一種
+從外面看起來像成功的失敗。
+
+API 行程裡設好的 provider 環境變數會被轉發進沙盒。走的是**白名單**,不是整包環境:
+`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`OPENROUTER_API_KEY`、`GEMINI_API_KEY`、
+`AWS_*` 等,以及 `CELLGEN_SANDBOX_ENV` 額外指定的名稱。沒設的名稱會被略過而不是
+傳成空字串(空字串會讓 opencode 以為那個 provider 已設定)。
+
+```bash
+export ANTHROPIC_API_KEY=sk-...
+uvicorn cellgen_api.main:app --port 8000 --app-dir services/api
+```
+
+E2B 尤其重要:沙盒是另一台機器,**什麼都不會繼承**。
 
 `local` backend 沒有隔離——plugin 是以當前使用者權限直接執行的,只適合本機開發。
 但它跑的是跟 E2B 完全相同的狀態捕捉、代理與生命週期程式碼,所以沒有雲端憑證也能開發整層。

@@ -97,3 +97,36 @@ def test_unparseable_config_is_replaced_rather_than_fatal(tmp_path):
     LocalBackend._ensure_opencode_config(workdir)
     config = json.loads((workdir / "opencode.json").read_text())
     assert config["mcp"]["cellgen"] == OPENCODE_CONFIG["mcp"]["cellgen"]
+
+
+def test_only_configured_names_reach_a_sandbox(monkeypatch):
+    """An allowlist, not the whole environment.
+
+    These are secrets; handing a sandbox everything this process happens to
+    hold is not something to do by accident.
+    """
+    from cellgen_api.config import Settings
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("SOME_UNRELATED_SECRET", "do-not-forward")
+    monkeypatch.delenv("CELLGEN_SANDBOX_ENV", raising=False)
+
+    env = Settings().sandbox_env()
+    assert env["ANTHROPIC_API_KEY"] == "sk-test"
+    assert "SOME_UNRELATED_SECRET" not in env
+
+
+def test_extra_names_can_be_opted_in(monkeypatch):
+    from cellgen_api.config import Settings
+
+    monkeypatch.setenv("MY_PROVIDER_TOKEN", "abc")
+    monkeypatch.setenv("CELLGEN_SANDBOX_ENV", "MY_PROVIDER_TOKEN")
+    assert Settings().sandbox_env()["MY_PROVIDER_TOKEN"] == "abc"
+
+
+def test_an_unset_name_is_omitted_rather_than_blank(monkeypatch):
+    """An empty string would read to opencode as a configured provider."""
+    from cellgen_api.config import Settings
+
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    assert "GROQ_API_KEY" not in Settings().sandbox_env()

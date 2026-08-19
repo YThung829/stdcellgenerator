@@ -51,7 +51,8 @@ class E2BBackend(SandboxBackend):
 
     def __init__(self, api_key: str | None, template: str,
                  opencode_port: int = OPENCODE_PORT,
-                 sandbox_timeout: int = DEFAULT_SANDBOX_TIMEOUT):
+                 sandbox_timeout: int = DEFAULT_SANDBOX_TIMEOUT,
+                 sandbox_env: dict[str, str] | None = None):
         if not api_key:
             raise RuntimeError(
                 "E2B_API_KEY is not set. Either configure it, or run with "
@@ -61,6 +62,7 @@ class E2BBackend(SandboxBackend):
         self.template = template
         self.port = opencode_port
         self.sandbox_timeout = sandbox_timeout
+        self.sandbox_env = dict(sandbox_env or {})
         # Connecting costs an API round trip *and* resumes a paused sandbox,
         # so the object is kept rather than re-derived per call.
         self._sandboxes: dict[str, object] = {}
@@ -109,7 +111,9 @@ class E2BBackend(SandboxBackend):
             # Tagged so a sandbox can still be identified in the E2B dashboard,
             # or recovered by listing, if this service loses its records.
             metadata={"cellgen_sandbox_id": sandbox_id},
-            envs={"OPENCODE_SERVER_PASSWORD": password},
+            # Nothing is inherited here -- the sandbox is a different machine
+            # -- so the agent's model provider has to be handed over.
+            envs={**self.sandbox_env, "OPENCODE_SERVER_PASSWORD": password},
             api_key=self.api_key,
         )
         handle = SandboxHandle(
@@ -146,7 +150,8 @@ class E2BBackend(SandboxBackend):
         await sbx.commands.run(
             f"opencode serve --port {self.port} --hostname 0.0.0.0",
             background=True, cwd=handle.workdir,
-            envs={"OPENCODE_SERVER_PASSWORD": handle.password or ""},
+            envs={**self.sandbox_env,
+                  "OPENCODE_SERVER_PASSWORD": handle.password or ""},
         )
         # get_host is synchronous and returns host:port without a scheme.
         handle.base_url = f"https://{sbx.get_host(self.port)}"

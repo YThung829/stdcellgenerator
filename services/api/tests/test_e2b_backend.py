@@ -149,3 +149,28 @@ class TestConstruction:
         """The SDK's default would reap a workspace mid-session."""
         backend = E2BBackend(api_key="k", template="t")
         assert backend.sandbox_timeout >= 3600
+
+
+class TestProviderCredentials:
+    """The agent needs a model, and on E2B nothing is inherited.
+
+    A sandbox with no provider key boots perfectly happily and then cannot
+    write a single constraint, which is the one failure that looks like
+    success from the outside.
+    """
+
+    def test_creating_a_sandbox_forwards_them(self):
+        backend = E2BBackend(api_key="k", template="t",
+                             sandbox_env={"ANTHROPIC_API_KEY": "sk-test"})
+        assert backend.sandbox_env["ANTHROPIC_API_KEY"] == "sk-test"
+
+    def test_the_server_password_is_not_overwritten_by_them(self):
+        """Forwarding must not let a stray name clobber the proxy's credential."""
+        backend = E2BBackend(
+            api_key="k", template="t",
+            sandbox_env={"OPENCODE_SERVER_PASSWORD": "attacker-chosen"})
+        envs = {**backend.sandbox_env, "OPENCODE_SERVER_PASSWORD": "real"}
+        assert envs["OPENCODE_SERVER_PASSWORD"] == "real"
+
+    def test_none_is_an_empty_mapping_not_a_crash(self):
+        assert E2BBackend(api_key="k", template="t").sandbox_env == {}

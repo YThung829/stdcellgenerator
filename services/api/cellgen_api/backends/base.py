@@ -76,6 +76,10 @@ class SandboxBackend(abc.ABC):
     """Create, address and tear down sandboxes running opencode."""
 
     name: str
+    # Provider credentials handed to the agent inside the sandbox. Without
+    # one of these opencode has no model and the workspace, while perfectly
+    # healthy, cannot actually write a constraint.
+    sandbox_env: dict[str, str]
 
     @abc.abstractmethod
     async def create(self, sandbox_id: str) -> SandboxHandle:

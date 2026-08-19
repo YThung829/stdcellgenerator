@@ -45,11 +45,16 @@ class LocalBackend(SandboxBackend):
     name = "local"
 
     def __init__(self, root: Path, engine_src: Path, opencode_bin: str = "opencode",
-                 port_base: int = OPENCODE_PORT):
+                 port_base: int = OPENCODE_PORT,
+                 sandbox_env: dict[str, str] | None = None):
         self.root = Path(root)
         self.engine_src = Path(engine_src)
         self.opencode_bin = opencode_bin
         self.port_base = port_base
+        # A local sandbox would inherit these anyway; setting them explicitly
+        # keeps the two backends configured the same way rather than one of
+        # them working by accident.
+        self.sandbox_env = dict(sandbox_env or {})
         self.root.mkdir(parents=True, exist_ok=True)
         self._procs: dict[str, asyncio.subprocess.Process] = {}
 
@@ -162,6 +167,7 @@ class LocalBackend(SandboxBackend):
         env = dict(os.environ)
         # The one env var that actually pins opencode's storage (see the
         # Phase 0 spike; OPENCODE_DATA_DIR is ignored).
+        env.update(self.sandbox_env)
         env["XDG_DATA_HOME"] = str(self._data_home(sandbox_id))
         env["OPENCODE_SERVER_PASSWORD"] = handle.password or ""
         env["PYTHONUNBUFFERED"] = "1"

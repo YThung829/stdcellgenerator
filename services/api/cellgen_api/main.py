@@ -33,6 +33,7 @@ def build_backend():
             api_key=settings.e2b_api_key,
             template=settings.e2b_template,
             opencode_port=4096,
+            sandbox_env=settings.sandbox_env(),
         )
     from cellgen_api.backends.local import LocalBackend
 
@@ -40,6 +41,7 @@ def build_backend():
         root=settings.sandbox_root,
         engine_src=settings.engine_src,
         opencode_bin=settings.opencode_bin,
+        sandbox_env=settings.sandbox_env(),
     )
 
 

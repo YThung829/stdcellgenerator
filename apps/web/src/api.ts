@@ -75,6 +75,64 @@ export interface Artifact {
   created_at: number
 }
 
+
+export type RunStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
+
+export interface PluginDelta {
+  id: string
+  stage: string
+  params: Record<string, unknown>
+  constraints_added: number
+  variables_added: number
+}
+
+export interface Run {
+  _id: string
+  experiment_id: string
+  cell: string
+  status: RunStatus
+  /** The engine's own word for the outcome: `ok`, `INFEASIBLE`, `ERROR`. */
+  solver_status?: string
+  /** Only ever set for a solve that succeeded -- see the executor. */
+  objective?: number | null
+  walltime?: number | null
+  metrics?: Record<string, number>
+  artifacts?: Partial<Record<'res' | 'var' | 'png' | 'gds' | 'log', string>>
+  plugin_deltas?: PluginDelta[]
+  error?: string
+  celery_task_id?: string
+  /** Present when the run could not be queued; it stays pending. */
+  dispatch_error?: string
+  created_at: number
+}
+
+export interface Experiment {
+  _id: string
+  name: string
+  description: string
+  artifact_id: string | null
+  preset: string
+  cells: string[]
+  overrides: string[]
+  max_time: number
+  /** Derived from the runs, never stored. */
+  status: RunStatus
+  created_at: number
+  runs: Run[]
+  run_count?: number
+  done_count?: number
+}
+
+export interface NewExperiment {
+  name: string
+  preset: string
+  cells: string[]
+  artifact_id?: string | null
+  description?: string
+  overrides?: string[]
+  max_time?: number
+}
+
 export class ApiError extends Error {
   status: number
 
@@ -161,4 +219,30 @@ export const api = {
     }),
 
   artifacts: () => call<Artifact[]>('/api/artifacts'),
+
+  // -- experiments ----------------------------------------------------
+
+  listExperiments: () => call<Experiment[]>('/api/experiments'),
+
+  getExperiment: (id: string) => call<Experiment>(`/api/experiments/${id}`),
+
+  createExperiment: (body: NewExperiment) =>
+    call<Experiment>('/api/experiments', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  cancelExperiment: (id: string) =>
+    call<Run[]>(`/api/experiments/${id}/cancel`, { method: 'POST' }),
+
+  getRun: (id: string) => call<Run>(`/api/runs/${id}`),
+
+  cancelRun: (id: string) => call<Run>(`/api/runs/${id}/cancel`, { method: 'POST' }),
+
+  /** Where to fetch one of a run's output files. */
+  runArtifactUrl: (id: string, kind: string) =>
+    `${BASE}/api/runs/${id}/artifacts/${kind}`,
+
+  /** The SSE endpoint a run's log is followed on. */
+  runLogUrl: (id: string) => `${BASE}/api/runs/${id}/log`,
 }

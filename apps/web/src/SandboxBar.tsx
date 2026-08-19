@@ -43,19 +43,21 @@ interface Props {
   onPause: () => void
   onResume: () => void
   onRebuild: () => void
+  tabs?: React.ReactNode
+  /** The workspace state and its controls only mean anything in Tab 1. */
+  showSandboxControls?: boolean
 }
 
 export function SandboxBar({ sandbox, phase, backend, busy, onPause, onResume,
-                             onRebuild }: Props) {
+                             onRebuild, tabs, showSandboxControls = true }: Props) {
   const live = phase === 'ready'
   return (
     <header className="flex items-center gap-3 border-b border-slate-800
                        bg-slate-900 px-4 py-2.5">
-      <div>
-        <span className="text-sm font-semibold text-slate-100">CellGenerator Studio</span>
-        <span className="ml-2 text-xs text-slate-500">開發區</span>
-      </div>
+      <span className="text-sm font-semibold text-slate-100">CellGenerator Studio</span>
+      {tabs}
 
+      {showSandboxControls && (
       <span
         className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5
                     text-xs font-medium ring-1 ring-inset ${PHASE_STYLE[phase]}`}
@@ -66,26 +68,30 @@ export function SandboxBar({ sandbox, phase, backend, busy, onPause, onResume,
         />
         {PHASE_LABEL[phase]}
       </span>
+      )}
 
-      <code className="text-xs text-slate-500">{SANDBOX_ID}</code>
+      {showSandboxControls &&
+        <code className="text-xs text-slate-500">{SANDBOX_ID}</code>}
       {backend && (
         <span className="text-xs text-slate-600">
           backend: <span className="text-slate-500">{backend}</span>
         </span>
       )}
-      {sandbox?.restored_sessions ? (
+      {showSandboxControls && sandbox?.restored_sessions ? (
         <span className="text-xs text-emerald-500/80">
           已還原 {sandbox.restored_sessions} 段對話
         </span>
       ) : null}
 
-      <div className="ml-auto flex items-center gap-2">
-        {/* Pausing snapshots first, so it is safe to leave; resume re-derives
-            the sandbox address, which changes across the cycle. */}
-        <Button onClick={onPause} disabled={!live || busy}>暫停</Button>
-        <Button onClick={onResume} disabled={live || busy}>恢復</Button>
-        <Button onClick={onRebuild} disabled={busy}>重建</Button>
-      </div>
+      {showSandboxControls && (
+        <div className="ml-auto flex items-center gap-2">
+          {/* Pausing snapshots first, so it is safe to leave; resume re-derives
+              the sandbox address, which changes across the cycle. */}
+          <Button onClick={onPause} disabled={!live || busy}>暫停</Button>
+          <Button onClick={onResume} disabled={live || busy}>恢復</Button>
+          <Button onClick={onRebuild} disabled={busy}>重建</Button>
+        </div>
+      )}
     </header>
   )
 }

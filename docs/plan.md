@@ -340,7 +340,8 @@ runs         { _id, experiment_id, cell, status, celery_task_id, pid,
 | 4 — 導出到 Mongo（Artifact） | ✅ 完成 | `services/api/cellgen_api/artifacts.py`、`tests/test_artifacts.py` |
 | 5 — cellgen MCP server | ✅ 完成 | `engine/src/cellgen/mcp/`、`tests/test_mcp.py`；沙盒自動寫 `opencode.json` |
 | 6 — Tab 2 後端（Celery） | ✅ 完成 | `services/worker/`、`experiments.py`、`runlog.py`、`infra/docker-compose.yml` |
-| 7–8 — Tab 2 前端 / plugin 化階段二 | ⬜ 未開始 | |
+| 7 — Tab 2 前端 | ✅ 完成 | `apps/web/src/experiments/` |
+| 8 — Plugin 化階段二 | ⬜ 未開始 | |
 | — 文件 | ✅ 完成 | `README.md`、`docs/manual.md`（每環節附實跑截圖） |
 | **MVP** | ✅ **達成** | 開沙盒 → iframe 內開發 → smoke → 匯出 → 關掉重開對話仍在 |
 

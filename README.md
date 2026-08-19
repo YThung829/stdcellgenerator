@@ -7,7 +7,7 @@ CP-SAT——名字裡的 "SMT" 是歷史遺留)。這個專案在它外面包了
 
 * **開發區(Tab 1)** — 一個可拋棄的沙盒,裡面跑 opencode。用自然語言寫 constraint、
   當場跑小測資驗證,再把成果匯出成 artifact。**MVP 已完成。**
-* **實驗區(Tab 2)** — 匯入 artifact,對一批 cell 跑 CP-SAT,比對指標。*(尚未開始)*
+* **實驗區(Tab 2)** — 匯入 artifact,對一批 cell 跑 CP-SAT,比對指標。**已完成。**
 
 完整的設計與決策記錄在 [`docs/plan.md`](docs/plan.md)。
 
@@ -22,9 +22,9 @@ CP-SAT——名字裡的 "SMT" 是歷史遺留)。這個專案在它外面包了
 | `engine/` — CP-SAT 引擎、單一 CLI 入口、constraint plugin 層 | ✅ 可用 |
 | `services/api/` — 沙盒生命週期、狀態快照、opencode 反向代理、artifact 匯出 | ✅ 可用 |
 | `apps/web/` — Tab 1 前端 | ✅ 可用 |
-| `services/worker/` — Tab 2 批次執行 | ⬜ 未開始 |
+| `services/worker/` — Celery worker、即時 log、取消 | ✅ 可用 |
 
-測試:engine 47 passed、api 30 passed。
+測試:engine 54 passed、api 95 passed、worker 18 passed。
 
 ### 開發區(Tab 1)
 
@@ -37,6 +37,13 @@ cd apps/web && npm install && npm run dev                          # 前端
 
 左邊是 iframe 裝著沙盒的 opencode;右邊看得到 agent 寫出來的 plugin(顯示的是
 manifest 實際生效的參數)、按一下就跑的 smoke 驗證,以及匯出。
+
+### 實驗區(Tab 2)
+
+![Tab 2 實驗區](docs/images/tab2-experiments.png)
+
+挑一個 artifact 和幾顆 cell,每顆 cell 一個 run,各自解、各自可取消。log 是即時串流的。
+**比較只看 objective 與 walltime**——同一個模型跑兩次,版面可能不同而成本相同。
 
 ### 引擎:一條指令解一顆 cell
 

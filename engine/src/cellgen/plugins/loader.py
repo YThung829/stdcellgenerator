@@ -113,6 +113,29 @@ def read_manifest(plugin_dir: Path | str) -> dict | None:
         raise PluginLoadError(f"Invalid JSON in {path}: {exc}") from exc
 
 
+def disabled_builtins(manifest: dict | None) -> list[str]:
+    """Built-in constraint ids the manifest switches off.
+
+    Accepts either a plain list of ids or the same object form the plugin
+    entries use, so a UI that toggles one can write it the way it already
+    writes the other::
+
+        {"builtins": ["placement.diffusion_alignment"]}
+        {"builtins": [{"id": "placement.diffusion_alignment", "enabled": false}]}
+    """
+    entries = (manifest or {}).get("builtins") or []
+    out: list[str] = []
+    for entry in entries:
+        if isinstance(entry, str):
+            out.append(entry)
+        elif isinstance(entry, dict) and entry.get("id"):
+            # Present but enabled is the normal case for a UI that lists them
+            # all; only an explicit false switches one off.
+            if entry.get("enabled", True) is False:
+                out.append(entry["id"])
+    return out
+
+
 def resolve_selection(manifest: dict | None) -> list[PluginSelection]:
     """Turn a manifest into the ordered list of plugins to run.
 

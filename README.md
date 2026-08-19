@@ -24,7 +24,7 @@ CP-SAT——名字裡的 "SMT" 是歷史遺留)。這個專案在它外面包了
 | `apps/web/` — Tab 1 前端 | ✅ 可用 |
 | `services/worker/` — Celery worker、即時 log、取消 | ✅ 可用 |
 
-測試:engine 54 passed、api 95 passed、worker 18 passed。
+測試:engine 68 passed、api 95 passed、worker 18 passed。
 
 ### 開發區(Tab 1)
 
@@ -66,6 +66,20 @@ uvicorn cellgen_api.main:app --port 8000 --app-dir services/api
 ![API 端點](docs/images/api-docs.png)
 
 ---
+
+## 把引擎自己的 constraint 關掉
+
+`GET /api/builtins` 列出引擎內建的 59 條 constraint。任何一條都能在實驗裡單獨停用:
+
+```json
+{ "builtins": ["placement.diffusion_alignment"] }
+```
+
+這是整個工具存在的理由——在此之前，要拿掉一條既有規則只能去改
+`archit/<TECH>/main.py`，所以沒人量得出它到底買到了什麼。停用一條會讓模型少掉它那些
+constraint(實測 `link_source_drain_gate_columns_to_transistor_placement` 少 200 條)。
+
+什麼都不停用時，模型與改動前**完全相同**——這點有回歸測試釘住。
 
 ## 三個核心設計
 

@@ -67,6 +67,8 @@ from src.cellgen.core.objective import Objective
 from src.cellgen.core.util import log_variable_info, print_smtcell_banner
 from src.cellgen.core.variable import TransistorVar
 from src.cellgen.solver.cpsat_wrapper import CPSAT
+# Gates every built-in constraint below, so an experiment can switch one off.
+from src.cellgen.plugins.builtins import apply
 
 _NUM_COL_SDG_ = 3  # number of columns needed for source/drain/gate
 
@@ -1593,7 +1595,7 @@ class CFET:
             self.routing_tolerance = int(rt_cfg.get("tol", 1) * self.c_tech.get_pitch("PC"))
         else:
             self.routing_tolerance = -1
-        rt.routing_localization_cfet(self)
+        apply(self, rt.routing_localization_cfet)
 
         # ^ Linking flow variables to arc usage
         self.opt.log_comment("Linking flow variables to arc usage ...")
@@ -1616,23 +1618,23 @@ class CFET:
         # ^ Route to I/O pins
         self._induce_external_routing_flow()
         # ^ CFET-specific: cross-device flows must use at least 1 cross-layer arc
-        rt.cfet_cross_device_via_lower_bound(self)
+        apply(self, rt.cfet_cross_device_via_lower_bound)
         # ^ optional: tighten the HPWL lower bound with mandatory cross-device via cost
         if self._cfg_get("cfet_hpwl_via_tightening", False):
-            rt.cfet_hpwl_via_cost_tightening(self)
+            apply(self, rt.cfet_hpwl_via_cost_tightening)
         # ^ A node cannot be propagated flow for more than one net.
         self._node_exclusivity()
 
         # ^ Geometric variables for design rule checking
         self.opt.log_comment("Adding geometric variables...")
         self.geometric_vars = {}
-        rule.geometric_vars_in_horizontal_layers(self)
-        rule.geometric_vars_in_vertical_layers(self)
+        apply(self, rule.geometric_vars_in_horizontal_layers)
+        apply(self, rule.geometric_vars_in_vertical_layers)
 
         # ^ EOL Design Rule Checking (C2C)
         eol_params = self.cell_config["eol_c2c_rule"]["value"]
-        rule.eol_rules_in_horizontal_layers(self, eol_params)
-        rule.eol_rules_in_vertical_layers(self, eol_params)
+        apply(self, rule.eol_rules_in_horizontal_layers, eol_params)
+        apply(self, rule.eol_rules_in_vertical_layers, eol_params)
 
         # ^ MAR Design Rule Checking (C2C)
         mar_params = self.cell_config["mar_c2c_rule"]["value"]
@@ -1640,49 +1642,49 @@ class CFET:
         for layer in self.cell_config["supervia"]["value"]:
             if layer in supervia_params:
                 supervia_params[layer] = True
-        rule.mar_rules_in_horizontal_layers(self, mar_params, supervia_params)
-        rule.mar_rules_in_vertical_layers(self, mar_params, supervia_params)
+        apply(self, rule.mar_rules_in_horizontal_layers, mar_params, supervia_params)
+        apply(self, rule.mar_rules_in_vertical_layers, mar_params, supervia_params)
 
         # ^ Via to metal connection rule
-        rule.via_induce_vertical_metal(self, supervia_params)
-        rule.via_induce_horizontal_metal(self, supervia_params)
-        rule.vertical_metal_must_be_connected_to_via(self)
-        rule.horizontal_metal_must_be_connected_to_via(self)
+        apply(self, rule.via_induce_vertical_metal, supervia_params)
+        apply(self, rule.via_induce_horizontal_metal, supervia_params)
+        apply(self, rule.vertical_metal_must_be_connected_to_via)
+        apply(self, rule.horizontal_metal_must_be_connected_to_via)
 
         # ^ Via distance rule
         via_params = {
             tuple(k.strip() for k in key.split(",")): value
             for key, value in self.cell_config["via_c2c_rule"]["value"].items()
         }
-        rule.via_separation_rules(self, via_params)
+        apply(self, rule.via_separation_rules, via_params)
 
         # ^ Pin Accessibility Rule
         self.opt.log_comment("Binding net usage on top layer ...")
         top_layer = "M2"
         self.net_use_top_track = {}  # netname -> bool var
         self.net_use_top_track_row_var = {}  # netname -> list of tracks row var
-        pin.top_layer_net_usage(self, top_layer)
+        apply(self, pin.top_layer_net_usage, top_layer)
 
         # ^ Each net uses one M2 track at most & each M2 track used by one net at most
         if self.cell_config.get("limit_m2_usage", {}).get("value", False):
-            pin.one_top_layer_track_per_net(self, top_layer)
-            pin.one_net_per_top_layer_track(self, top_layer)
+            apply(self, pin.one_top_layer_track_per_net, top_layer)
+            apply(self, pin.one_net_per_top_layer_track, top_layer)
 
         # ^ For each M1 pin, ensure at least MPO entry point usable for routing on M2
         self.M1_MPO = self.cell_config["MPO"]["value"]
         if self.M1_MPO > 0:
-            pin.m1_minimum_pin_opening(self, top_layer, mar_params, eol_params)
+            apply(self, pin.m1_minimum_pin_opening, top_layer, mar_params, eol_params)
 
         # ^ M0 pin: at least MPO entry point (besides its M1 SON) usable for routing
-        pin.m0_pin(self)
+        apply(self, pin.m0_pin)
 
         # ^ M0 pins separated across different rows
         if self.cell_config["m0_pin_separation"]["value"]:
-            pin.m0_pin_separation(self)
+            apply(self, pin.m0_pin_separation)
 
         # ^ Extend M0 pin to vacancy edges
         if self.cell_config["m0_pin_extension"]["value"]:
-            pin.m0_pin_extension(self, vacancy_edges=self.cell_config["m0_pin_extension"]["vacancy_edges"])
+            apply(self, pin.m0_pin_extension, vacancy_edges=self.cell_config["m0_pin_extension"]["vacancy_edges"])
 
     def _prohibit_routing_to_left_cell_boundaries(self):
         """The leftmost gate column (col index 0) should not be used for routing."""

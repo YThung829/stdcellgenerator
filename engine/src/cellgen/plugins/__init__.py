@@ -24,11 +24,19 @@ from src.cellgen.plugins.hooks import (  # noqa: F401
 from src.cellgen.plugins.loader import (  # noqa: F401
     PluginLoadError,
     PluginSelection,
+    disabled_builtins,
     load,
     load_plugin_dir,
     load_plugin_file,
     read_manifest,
     resolve_selection,
+)
+from src.cellgen.plugins.builtins import (  # noqa: F401
+    apply,
+    builtin_id,
+    catalogue,
+    is_enabled,
+    set_disabled,
 )
 from src.cellgen.plugins.registry import (  # noqa: F401
     STAGES,

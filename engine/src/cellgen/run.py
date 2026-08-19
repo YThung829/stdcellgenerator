@@ -251,6 +251,11 @@ def run(
     # Load before any solve so a broken plugin fails the run immediately rather
     # than after the first cell has already burned solver time.
     plugins.set_active(plugins.load(plugin_dir))
+    # Built-ins the manifest switches off. Separate from the plugin selection
+    # because they are gated at their existing call sites rather than run from
+    # a list; see plugins/builtins.py.
+    manifest = plugins.read_manifest(plugin_dir) if plugin_dir else None
+    plugins.set_disabled(plugins.disabled_builtins(manifest))
 
     # Preset overrides first so an explicit --override on the command line wins.
     merged = list(cfg.overrides) + list(overrides or [])

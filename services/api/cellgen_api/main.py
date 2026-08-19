@@ -241,6 +241,22 @@ async def get_artifact(artifact_id: str, request: Request):
     return artifact.to_dict()
 
 
+@app.get("/api/builtins")
+async def list_builtins():
+    """The engine's own constraints, each switchable per experiment.
+
+    Read from the engine rather than stored, so a constraint added to the
+    engine appears here without a second list to maintain. An experiment turns
+    one off through its artifact's manifest.
+    """
+    try:
+        from src.cellgen.plugins import builtins as builtin_registry
+    except ImportError as exc:  # pragma: no cover - engine not installed
+        raise HTTPException(
+            503, f"the engine is not importable from this API: {exc}") from exc
+    return {"builtins": builtin_registry.catalogue()}
+
+
 # ---------------------------------------------------------------- experiments
 
 

@@ -341,11 +341,13 @@ runs         { _id, experiment_id, cell, status, celery_task_id, pid,
 | 5 — cellgen MCP server | ✅ 完成 | `engine/src/cellgen/mcp/`、`tests/test_mcp.py`；沙盒自動寫 `opencode.json` |
 | 6 — Tab 2 後端（Celery） | ✅ 完成 | `services/worker/`、`experiments.py`、`runlog.py`、`infra/docker-compose.yml` |
 | 7 — Tab 2 前端 | ✅ 完成 | `apps/web/src/experiments/` |
-| 8 — Plugin 化階段二 | ⬜ 未開始 | |
+| 8 — Plugin 化階段二 | ✅ 完成 | `plugins/builtins.py`、59 條內建 constraint 可逐條停用 |
 | — 文件 | ✅ 完成 | `README.md`、`docs/manual.md`（每環節附實跑截圖） |
 | **MVP** | ✅ **達成** | 開沙盒 → iframe 內開發 → smoke → 匯出 → 關掉重開對話仍在 |
 
-測試現況：engine 54 passed、api 95 passed、worker 18 passed；前端 `tsc -b` 與 oxlint 乾淨。
+測試現況：engine 68 passed、api 95 passed、worker 18 passed；前端 `tsc -b` 與 oxlint 乾淨。
+
+**Phase 0–8 全部完成。**
 
 ### 實作中推翻的計劃假設
 
@@ -377,6 +379,18 @@ runs         { _id, experiment_id, cell, status, celery_task_id, pid,
 - **項目 3（沙盒回收）✅** — 閒置逾時自動 pause（先快照，不會掉資料），proxy 流量當作活動訊號，前端 `pagehide` 時 `sendBeacon` 立即釋放。`CELLGEN_IDLE_PAUSE_SECONDS=0` 可關閉。
 - **項目 1（E2B 實測）⛔ 受阻** — 這個開發環境的網路政策擋掉 `api.e2b.dev`（只放行 npm/PyPI/Anthropic），也沒有 `E2B_API_KEY`。**不需要憑證的部分全部做完**：對照已安裝的 SDK 逐一校正 `e2b.py`（`AsyncSandbox.resume` 根本不存在等五個缺陷）、`infra/e2b/` 的 template、以及一組讀取後端原始碼、確認每個 SDK 呼叫都真實存在的測試。
 - **項目 2（真實對話 round-trip）⛔ 受阻** — 需要沙盒內有 model provider key。
+
+### Phase 8 的做法與計劃不同（刻意）
+
+計劃寫的是把 `_placement_constraints` / `_routing_constraints` 改成 **manifest 驅動的 `run_stage()`**。實作時改成**在原呼叫點就地 gating**：
+
+```python
+plc.diffusion_alignment(self)   →   apply(self, plc.diffusion_alignment)
+```
+
+原因：orchestrator 不是一串平鋪的呼叫。裡面有條件（`if self.use_break_symmetry`）、交錯的 logging，以及一個花過功夫才調對的順序。把這些改寫成資料，等於拿全部風險去換一個沒人要求過的「可重排順序」。就地 gating 在沒有停用任何東西時，序列與改動前**逐位元組相同**——這正是回歸測試斷言的事。
+
+代價：目前只能開關，不能重排。要重排再說。
 
 ### Commit 歷程
 

@@ -29,6 +29,8 @@ from src.cellgen.core.util import (
 )
 from src.cellgen.core.variable import TransistorVar
 from src.cellgen.solver.cpsat_wrapper import CPSAT
+# Gates every built-in constraint below, so an experiment can switch one off.
+from src.cellgen.plugins.builtins import apply
 
 
 class FinFET:
@@ -1557,27 +1559,27 @@ class FinFET:
         (plc.*).
         """
         # Linking source/drain/gate columns to transistor placement.
-        plc.link_source_drain_gate_columns_to_transistor_placement(self)
+        apply(self, plc.link_source_drain_gate_columns_to_transistor_placement)
         # Ban other nets from using power columns.
-        plc.ban_other_nets_on_pwr_columns(self)
+        apply(self, plc.ban_other_nets_on_pwr_columns)
         # No CA contact allowed unless the column resides a source or term.
         plc.prohibit_CA_contact_on_non_source_term_columns(self)
         # If a diffusion break is used in PMOS, NMOS must use it at the same col.
-        plc.diffusion_alignment(self)
+        apply(self, plc.diffusion_alignment)
         # Reduce the number of diffusion breaks by setting allowable DB columns.
         self.opt.log_comment("Setting allowable diffusion break columns...")
         logger.info(
             f"\t==\tSetting allowable diffusion break columns to "
             f"{self.fin_tech.allowable_diffusion_break_cols}..."
         )
-        plc.limit_diffusion_breaks(self)
+        apply(self, plc.limit_diffusion_breaks)
         # Lexicographic Order Symmetry Breaking (only when enabled).
         if self.use_break_symmetry:
-            plc.placement_lexico_order_symmetry_breaking(self)
+            apply(self, plc.placement_lexico_order_symmetry_breaking)
         # Pairwise diffusion / lisd / gate sharing.
-        plc.pairwise_diffusion_sharing(self)
-        plc.pairwise_lisd_sharing(self)
-        plc.pairwise_gate_sharing(self)
+        apply(self, plc.pairwise_diffusion_sharing)
+        apply(self, plc.pairwise_lisd_sharing)
+        apply(self, plc.pairwise_gate_sharing)
 
     def _routing_constraints(self):
         """
@@ -1595,25 +1597,25 @@ class FinFET:
         """
         # ----- boundary protection -----------------------------------------
         logger.info("Prohibiting routing to left/right cell boundaries ...")
-        rt.prohibit_routing_to_left_cell_boundaries(self)
-        rt.prohibit_routing_to_right_cell_boundaries(self)
+        apply(self, rt.prohibit_routing_to_left_cell_boundaries)
+        apply(self, rt.prohibit_routing_to_right_cell_boundaries)
 
         # ----- gate sharing / gate-cut window / DB protection / CA pickup ---
-        rt.bind_gate_sharing_to_columns(self, db_as_gs=True)
+        apply(self, rt.bind_gate_sharing_to_columns, db_as_gs=True)
 
         self.min_gate_cut_len = self.cell_config["minimum_gate_cut_length"]["value"]
-        rt.gate_cut_window(self)
-        rt.prohibit_pc_routing_in_diffusion_break_cols(self)
+        apply(self, rt.gate_cut_window)
+        apply(self, rt.prohibit_pc_routing_in_diffusion_break_cols)
         rt.enforce_CA_pickup_for_gate_cut(self)
 
         # ----- gate-contact cap (LIG routing OFF -> tighten) ----------------
         if not self.cell_config["lig_routing"]["value"]:
-            rt.limit_gate_contact(self, num_contact=1)
+            apply(self, rt.limit_gate_contact, num_contact=1)
 
         # ----- LISD sharing + contact cap (LISD routing OFF -> tighten) -----
-        rt.bind_lisd_sharing_to_columns(self)
+        apply(self, rt.bind_lisd_sharing_to_columns)
         if not self.cell_config["lisd_routing"]["value"]:
-            rt.limit_lisd_contact(self, num_contact=1)
+            apply(self, rt.limit_lisd_contact, num_contact=1)
 
         # ----- [3T only] middle-row PC<->M0 via restriction -----------------
         if self.fin_tech.num_rt_track == 3:
@@ -1633,48 +1635,48 @@ class FinFET:
         self.routing_tolerance_x = tol
         self.routing_tolerance_y = tol
         self.routing_tolerance_per_fanout = 0
-        rt.routing_localization(self)
+        apply(self, rt.routing_localization)
 
         # ----- flow <-> arc <-> edge linking + net/SON uniqueness -----------
         self.opt.log_comment("Linking flow variables to arc usage ...")
-        rt.link_flow_to_arc(self)
-        rt.link_arc_to_edge(self)
-        rt.net_has_one_src_and_k_terminals(self)
-        rt.net_src_node_uniqueness(self)
-        rt.net_term_node_uniqueness(self)
+        apply(self, rt.link_flow_to_arc)
+        apply(self, rt.link_arc_to_edge)
+        apply(self, rt.net_has_one_src_and_k_terminals)
+        apply(self, rt.net_src_node_uniqueness)
+        apply(self, rt.net_term_node_uniqueness)
         rt.net_SON_node_uniqueness(self)
         rt.prohibit_multiple_SONs_same_column(self)
 
         # ----- routing flow induction (internal + external) -----------------
-        rt.induce_internal_routing_flow_with_diffusion(self)
-        rt.induce_external_routing_flow(self)
+        apply(self, rt.induce_internal_routing_flow_with_diffusion)
+        apply(self, rt.induce_external_routing_flow)
         # Tree enforcement only for small cells.
         if self.insert_num_db <= 1:
-            rt.tree_enforcement(self)
-        rt.node_exclusivity(self)
+            apply(self, rt.tree_enforcement)
+        apply(self, rt.node_exclusivity)
 
         # ----- design rules: geometric / EOL / MAR --------------------------
         self.opt.log_comment("Adding geometric variables...")
-        rule.geometric_vars_in_horizontal_layers(self)
-        rule.geometric_vars_in_vertical_layers(self)
+        apply(self, rule.geometric_vars_in_horizontal_layers)
+        apply(self, rule.geometric_vars_in_vertical_layers)
 
         eol_params = self.cell_config["eol_c2c_rule"]["value"]
-        rule.eol_rules_in_horizontal_layers(self, eol_params)
-        rule.eol_rules_in_vertical_layers(self, eol_params)
+        apply(self, rule.eol_rules_in_horizontal_layers, eol_params)
+        apply(self, rule.eol_rules_in_vertical_layers, eol_params)
 
         mar_params = self.cell_config["mar_c2c_rule"]["value"]
         supervia_params = {layer: False for layer in self.lgg.layer_to_idx.keys()}
         for layer in self.cell_config["supervia"]["value"]:
             if layer in supervia_params:
                 supervia_params[layer] = True
-        rule.mar_rules_in_horizontal_layers(self, mar_params, supervia_params)
-        rule.mar_rules_in_vertical_layers(self, mar_params, supervia_params)
+        apply(self, rule.mar_rules_in_horizontal_layers, mar_params, supervia_params)
+        apply(self, rule.mar_rules_in_vertical_layers, mar_params, supervia_params)
 
         # ----- via-to-metal connection rule ---------------------------------
-        rule.via_induce_vertical_metal(self, supervia_params)
-        rule.via_induce_horizontal_metal(self, supervia_params)
-        rule.vertical_metal_must_be_connected_to_via(self)
-        rule.horizontal_metal_must_be_connected_to_via(self)
+        apply(self, rule.via_induce_vertical_metal, supervia_params)
+        apply(self, rule.via_induce_horizontal_metal, supervia_params)
+        apply(self, rule.vertical_metal_must_be_connected_to_via)
+        apply(self, rule.horizontal_metal_must_be_connected_to_via)
         # FinFET-only DRC: every M2 metal endpoint must terminate on a via (bans
         # floating M2 stubs; SON I/O nodes are exempt). Gated OFF by default;
         # enable for production DRC cleanliness via
@@ -1683,14 +1685,14 @@ class FinFET:
         # enabled.
         if getattr(self, "enforce_metal_endpoint_via",
                    self._cfg_get("enforce_metal_endpoint_via", False)):
-            rule.metal_endpoint_must_have_via(self, target_layers=frozenset({"M2"}))
+            apply(self, rule.metal_endpoint_must_have_via, target_layers=frozenset({"M2"}))
 
         # ----- via separation rule ------------------------------------------
         via_params = {
             tuple(k.strip() for k in key.split(",")): value
             for key, value in self.cell_config["via_c2c_rule"]["value"].items()
         }
-        rule.via_separation_rules(self, via_params)
+        apply(self, rule.via_separation_rules, via_params)
 
         # ----- per-layer usage (diagnostic objectives feed off these) -------
         self._m2_layer_usage(m2_layer="M2")
@@ -1700,22 +1702,22 @@ class FinFET:
         # ----- pin accessibility --------------------------------------------
         self.opt.log_comment("Binding net usage on top layer ...")
         top_layer = "M2"
-        pin.top_layer_net_usage(self, top_layer)
+        apply(self, pin.top_layer_net_usage, top_layer)
         if self.cell_config.get("limit_m2_usage", {}).get("value", False):
-            pin.one_top_layer_track_per_net(self, top_layer)
-            pin.one_net_per_top_layer_track(self, top_layer)
+            apply(self, pin.one_top_layer_track_per_net, top_layer)
+            apply(self, pin.one_net_per_top_layer_track, top_layer)
 
         # M1 minimum pin opening (only when MPO > 0).
         self.M1_MPO = self.cell_config["MPO"]["value"]
         if self.M1_MPO > 0:
-            pin.m1_minimum_pin_opening(self, top_layer, mar_params, eol_params)
+            apply(self, pin.m1_minimum_pin_opening, top_layer, mar_params, eol_params)
 
         # M0 pin SON entry-point rule.
-        pin.m0_pin(self)
+        apply(self, pin.m0_pin)
         if self.cell_config["m0_pin_separation"]["value"]:
-            pin.m0_pin_separation(self)
+            apply(self, pin.m0_pin_separation)
         if self.cell_config["m0_pin_extension"]["value"]:
-            pin.m0_pin_extension(self, vacancy_edges=self.cell_config["m0_pin_extension"]["vacancy_edges"])
+            apply(self, pin.m0_pin_extension, vacancy_edges=self.cell_config["m0_pin_extension"]["vacancy_edges"])
 
     # ----- per-layer usage helpers ----------------------------------------
 

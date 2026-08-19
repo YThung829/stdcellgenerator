@@ -85,6 +85,8 @@ from src.cellgen.core.objective import Objective
 from src.cellgen.core.util import log_variable_info, print_smtcell_banner
 from src.cellgen.core.variable import TransistorVar
 from src.cellgen.solver.cpsat_wrapper import CPSAT
+# Gates every built-in constraint below, so an experiment can switch one off.
+from src.cellgen.plugins.builtins import apply
 
 
 class QFET:
@@ -1795,18 +1797,18 @@ class QFET:
         src.cellgen.core.placement (each passed `self`).
         """
         # Per-tier modernized (src.cellgen.core.placement):
-        plc.link_source_drain_gate_columns_to_transistor_placement(self)
-        plc.ban_other_nets_on_pwr_columns(self)
+        apply(self, plc.link_source_drain_gate_columns_to_transistor_placement)
+        apply(self, plc.ban_other_nets_on_pwr_columns)
         plc.prohibit_CA_contact_on_non_source_term_columns(self)
-        plc.diffusion_alignment(self)
+        apply(self, plc.diffusion_alignment)
         if self.use_break_symmetry:
-            plc.placement_lexico_order_symmetry_breaking(self)
-            plc.placement_site_flip_symmetry_breaking(self)
+            apply(self, plc.placement_lexico_order_symmetry_breaking)
+            apply(self, plc.placement_site_flip_symmetry_breaking)
 
         # Per-tier pairwise sharing (src.cellgen.core.placement):
-        plc.pairwise_diffusion_sharing(self)
-        plc.pairwise_lisd_sharing(self)
-        plc.pairwise_gate_sharing(self)
+        apply(self, plc.pairwise_diffusion_sharing)
+        apply(self, plc.pairwise_lisd_sharing)
+        apply(self, plc.pairwise_gate_sharing)
     
     def _routing_constraints(self, include_external_son: bool = False):
         """
@@ -1840,11 +1842,11 @@ class QFET:
 
         # ----- boundary + gate cut + DB protection -------------------------
         # Per-tier modernized for QFET (src.cellgen.core.routing).
-        rt.prohibit_routing_to_left_cell_boundaries(self)
-        rt.bind_gate_sharing_to_columns(self)
-        rt.gate_cut_window(self)
+        apply(self, rt.prohibit_routing_to_left_cell_boundaries)
+        apply(self, rt.bind_gate_sharing_to_columns)
+        apply(self, rt.gate_cut_window)
         rt.enforce_CA_pickup_for_gate_cut(self)
-        rt.prohibit_pc_routing_in_diffusion_break_cols(self)
+        apply(self, rt.prohibit_pc_routing_in_diffusion_break_cols)
 
         # ----- gate contact cap (off -> tighten) ----------------------------
         # lig_routing / lisd_routing defaults flipped to True for QFET (was False).
@@ -1855,37 +1857,37 @@ class QFET:
         # (couldn't add a second tap to anchor a metal segment). Override
         # to False in cell_config if explicit single-contact is needed.
         if not self._cfg_get("lig_routing", True):
-            rt.limit_gate_contact(self, num_contact=1)
+            apply(self, rt.limit_gate_contact, num_contact=1)
 
         # ----- routing-window localization + right-boundary OOB ------------
         self.opt.log_comment("Routing Window Constraint ...")
-        rt.routing_localization(self)
+        apply(self, rt.routing_localization)
         if self.prevent_routing_OOB:
-            rt.prohibit_routing_to_right_cell_boundaries(self)
+            apply(self, rt.prohibit_routing_to_right_cell_boundaries)
 
         # ----- LISD sharing + contact cap (off -> tighten) ------------------
-        rt.bind_lisd_sharing_to_columns(self)
+        apply(self, rt.bind_lisd_sharing_to_columns)
         if not self._cfg_get("lisd_routing", True):
-            rt.limit_lisd_contact(self, num_contact=1)
+            apply(self, rt.limit_lisd_contact, num_contact=1)
 
         # ----- flow <-> arc <-> edge linking + net/SON uniqueness --------------
         self.opt.log_comment("Linking flow variables to arc usage ...")
-        rt.link_flow_to_arc(self)
-        rt.link_arc_to_edge(self)
+        apply(self, rt.link_flow_to_arc)
+        apply(self, rt.link_arc_to_edge)
         # AtMostOne over the via-stack {VL, MIV1, MIV2, ...} at any (r, c)
         # where a virtual jump lands. No-op when no virtual pairs in the LGG.
-        rt.prohibit_virtual_edge_shorting(self)
-        rt.net_has_one_src_and_k_terminals(self)
-        rt.net_src_node_uniqueness(self)
-        rt.net_term_node_uniqueness(self)
+        apply(self, rt.prohibit_virtual_edge_shorting)
+        apply(self, rt.net_has_one_src_and_k_terminals)
+        apply(self, rt.net_src_node_uniqueness)
+        apply(self, rt.net_term_node_uniqueness)
         rt.net_SON_node_uniqueness(self)
         rt.prohibit_multiple_SONs_same_column(self)
 
         # ----- routing flow induction (internal always; external on toggle) -
-        rt.induce_internal_routing_flow_with_diffusion(self)
+        apply(self, rt.induce_internal_routing_flow_with_diffusion)
         if include_external_son:
-            rt.induce_external_routing_flow(self)
-        rt.node_exclusivity(self)
+            apply(self, rt.induce_external_routing_flow)
+        apply(self, rt.node_exclusivity)
 
         # ----- via-to-metal connectivity (no orphan vias) ------------------
         # Default OFF: when `link_flow_to_arc` is biconditional (forward+reverse),
@@ -1901,8 +1903,8 @@ class QFET:
             for layer in self._cfg_get("supervia", []):
                 if layer in supervia_params:
                     supervia_params[layer] = True
-            rule.via_induce_vertical_metal(self, supervia_params)
-            rule.via_induce_horizontal_metal(self, supervia_params)
+            apply(self, rule.via_induce_vertical_metal, supervia_params)
+            apply(self, rule.via_induce_horizontal_metal, supervia_params)
 
         # The rule.* DRC block below (geometric / EOL / MAR / via-separation,
         # top-metal usage, IO-pin geometry) is gated by the return below.
@@ -1910,22 +1912,22 @@ class QFET:
 
         # ----- design rules: geometric / EOL / MAR / via -------------------
         self.opt.log_comment("Adding geometric variables ...")
-        rule.geometric_vars_in_horizontal_layers(self)
-        rule.geometric_vars_in_vertical_layers(self)
+        apply(self, rule.geometric_vars_in_horizontal_layers)
+        apply(self, rule.geometric_vars_in_vertical_layers)
 
         eol_params = dict(self._cfg_get("eol_c2c_rule", {}))
-        rule.eol_rules_in_horizontal_layers(self, eol_params)
-        rule.eol_rules_in_vertical_layers(self, eol_params)
+        apply(self, rule.eol_rules_in_horizontal_layers, eol_params)
+        apply(self, rule.eol_rules_in_vertical_layers, eol_params)
 
         mar_params = dict(self._cfg_get("mar_c2c_rule", {}))
         supervia_params = {layer: False for layer in self.lgg.layer_to_idx}
         for layer in self._cfg_get("supervia", []):
             if layer in supervia_params:
                 supervia_params[layer] = True
-        rule.mar_rules_in_horizontal_layers(self, mar_params, supervia_params)
-        rule.mar_rules_in_vertical_layers(self, mar_params, supervia_params)
-        rule.via_induce_vertical_metal(self, supervia_params)
-        rule.via_induce_horizontal_metal(self, supervia_params)
+        apply(self, rule.mar_rules_in_horizontal_layers, mar_params, supervia_params)
+        apply(self, rule.mar_rules_in_vertical_layers, mar_params, supervia_params)
+        apply(self, rule.via_induce_vertical_metal, supervia_params)
+        apply(self, rule.via_induce_horizontal_metal, supervia_params)
 
         # Not wired here:
         #   via_separation_rules(self, via_params)     - via C2C rule (rule.py)

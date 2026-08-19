@@ -122,6 +122,23 @@ def list_plugins() -> dict[str, Any]:
 
 
 @mcp.tool()
+def list_builtin_constraints(module: str = "") -> dict[str, Any]:
+    """The engine's own constraints, and whether this workspace switches any off.
+
+    These are the rules the engine has always applied. Each can be disabled per
+    run by adding its id to `builtins` in `plugins/manifest.json`, which is how
+    an experiment measures what one was buying. Filter by module:
+    `placement`, `routing`, `rule`, `pin`.
+    """
+    from src.cellgen.plugins import builtins as builtin_registry
+
+    entries = builtin_registry.catalogue()
+    if module:
+        entries = [e for e in entries if e["module"] == module.strip().lower()]
+    return {"count": len(entries), "builtins": entries}
+
+
+@mcp.tool()
 def validate_constraint(path: str) -> dict[str, Any]:
     """Load one plugin file and report whether it registers a usable constraint.
 

@@ -84,7 +84,7 @@ from src.cellgen.core.graph import LayeredGridGraph
 from src.cellgen.core.objective import Objective
 from src.cellgen.core.util import log_variable_info, print_smtcell_banner
 from src.cellgen.core.variable import TransistorVar
-from src.cellgen.solver.cpsat_wrapper import CPSAT
+from src.cellgen.solver import backends
 # Gates every built-in constraint below, so an experiment can switch one off.
 from src.cellgen.plugins.builtins import apply
 
@@ -336,9 +336,9 @@ class QFET:
         """
         Create the optimization model from the selected solver backend.
 
-        Dispatches on self.solver_name to a builder in the local `builders` map.
-        Only "cpsat" is wired; unknown backends raise NotImplementedError with a
-        clear message.
+        `cpsat` builds an OR-Tools CP-SAT model; `cuopt` builds the same model
+        lowered to linear rows for NVIDIA cuOpt's GPU MILP solver. Both expose
+        the same model-building API, so no constraint below changes.
 
         When `flag_log_constraints` is True, every constraint is mirrored to
         `<output_dir>/constraint/<subckt>.log` by the backend wrapper.
@@ -347,15 +347,7 @@ class QFET:
             f"{self.output_dir}/constraint/{self.circuit.subckt_name}.log"
             if flag_log_constraints else None
         )
-        builders = {
-            "cpsat":  lambda: CPSAT(logfile=logfile),
-        }
-        if self.solver_name not in builders:
-            raise NotImplementedError(
-                f"Solver backend {self.solver_name!r} is not supported. "
-                f"Available: {sorted(builders)}."
-            )
-        self.opt = builders[self.solver_name]()
+        self.opt = backends.make_model(self.solver_name, logfile)
 
     def _init_subsystems(self):
         """Initialize graph, tech, CP-SAT variable domain, variables, and region caches."""
@@ -567,14 +559,19 @@ class QFET:
 
     def wsum(self, objectives=None, exit_on_unsat=True, silence=False):
         """
-        Weighted-sum CP-SAT solve. Applies the configured model_preset, sums
-        weighted objectives, and runs `solver.Solve`. Returns (total_obj_expr,
-        ObjectiveValue) on success; honors exit_on_unsat for UNSAT/UNKNOWN.
+        Weighted-sum solve on the configured backend. Applies the model_preset,
+        sums weighted objectives, and runs `solver.Solve`. Returns
+        (total_obj_expr, ObjectiveValue) on success; honors exit_on_unsat.
+
+        The model_preset block below is CP-SAT search tuning. The cuOpt solver
+        accepts the same attribute names so this code runs unchanged, and
+        reports which of them it cannot honour; none of them is part of the
+        model, so the objective assembled here is identical either way.
         """
         import time
 
         self.opt.log_comment("Defining the objective function ...")
-        self.solver = cp_model.CpSolver()
+        self.solver = backends.make_solver(self.solver_name, self.cell_config)
         self.solver.parameters.num_search_workers = self._cfg_get("num_search_workers", 8)
         self.solver.parameters.random_seed = self._cfg_get("seed", 0)
         if silence:
@@ -1011,9 +1008,9 @@ class QFET:
             domain_sd_ci              Domain wraps sd_ci
             domain_pc_ci              Domain wraps pc_ci
 
-        TODO: currently CP-SAT-specific (cp_model.Domain). When other solver
-        backends are wired, abstract the Domain construction through the
-        solver-wrapper layer.
+        Domains are built as `cp_model.Domain` objects. The cuOpt backend reads
+        them through `milp.domain_intervals`, which takes any object exposing
+        `FlattenedIntervals()`, so both backends consume these unchanged.
         """
         logger.debug("Initializing CP-SAT variable domain...")
         placement_layer = self.q_tech.default_placement_layer

@@ -233,10 +233,13 @@ step, so they always exist by the time a plugin runs.
 | `lgg.rows_in_layer_from(layer, row)` | Return the list of rows in the given layer starting at the specified row. |
 | `lgg.stats()` | Print the number of nodes and edges in the graph. |
 
-### `inst.opt` — CP-SAT calls available
+### `inst.opt` — the model-building calls available
 
-A `cp_model.CpModel` subclass that mirrors every call into a readable
-constraint log, which is how the UI shows what a plugin actually added.
+The model object mirrors every call into a readable constraint log,
+which is how the UI shows what a plugin actually added. Two backends
+implement this same surface: `CPSAT` (OR-Tools, the default) and
+`CUOPT` (NVIDIA cuOpt on a GPU, `--solver cuopt`). Stick to the calls
+below and a plugin runs on either one.
 
 | method | purpose |
 |---|---|
@@ -266,6 +269,10 @@ constraint log, which is how the UI shows what a plugin actually added.
 | `opt.Minimize(expr: LinearExpr)` |  |
 | `opt.Maximize(expr: LinearExpr)` |  |
 | `opt.AddHint(var: IntVar, value: int)` |  |
+
+`AddCircuit`, `AddCumulative`, `AddNoOverlap` and `NewIntervalVar`
+have no linear form and are CP-SAT-only: the cuOpt backend raises
+rather than approximating them. No built-in constraint uses them.
 
 ## Worked examples: the built-in constraints
 

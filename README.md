@@ -2,8 +2,11 @@
 
 用自然語言開發 standard-cell 的 place & route constraint,再把成果撒成批次實驗。
 
-底層引擎是 UCSD 的 [SMTCellUCSD 2.0](engine/)（同步 place & route,求解器是 OR-Tools
-CP-SAT——名字裡的 "SMT" 是歷史遺留)。這個專案在它外面包了兩層:
+底層引擎是 UCSD 的 [SMTCellUCSD 2.0](engine/)（同步 place & route,預設求解器是 OR-Tools
+CP-SAT——名字裡的 "SMT" 是歷史遺留)。引擎另外支援 **NVIDIA cuOpt** 作為 GPU 求解後端
+(`--solver cuopt`),同一份 constraint 與 objective 兩邊完全一致,詳見
+[engine/README.md 的 Solver Backends](engine/README.md#solver-backends)。
+這個專案在它外面包了兩層:
 
 * **開發區(Tab 1)** — 一個可拋棄的沙盒,裡面跑 opencode。用自然語言寫 constraint、
   當場跑小測資驗證,再把成果匯出成 artifact。**MVP 已完成。**
@@ -19,7 +22,7 @@ CP-SAT——名字裡的 "SMT" 是歷史遺留)。這個專案在它外面包了
 
 | 元件 | 狀態 |
 |---|---|
-| `engine/` — CP-SAT 引擎、單一 CLI 入口、constraint plugin 層 | ✅ 可用 |
+| `engine/` — 求解引擎(CP-SAT / cuOpt 雙後端)、單一 CLI 入口、constraint plugin 層 | ✅ 可用 |
 | `services/api/` — 沙盒生命週期、狀態快照、opencode 反向代理、artifact 匯出 | ✅ 可用 |
 | `apps/web/` — Tab 1 前端 | ✅ 可用 |
 | `services/worker/` — Celery worker、即時 log、取消 | ✅ 可用 |

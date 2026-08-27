@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cellgen-engine"
 version = "2.0.0"
-description = "SMTCell 2.0 - CP-SAT standard-cell simultaneous place & route"
+description = "SMTCell 2.0 - standard-cell simultaneous place & route (CP-SAT or cuOpt)"
 readme = "README.md"
 license = { file = "LICENSE" }
 # The codebase uses PEP 604 unions, builtin generics and itertools.pairwise.
@@ -25,6 +25,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The GPU solve backend (`--solver cuopt`). Needs a CUDA GPU, so it stays out of
+# the core dependencies -- the CP-SAT backend is what runs without one.
+cuopt = ["cuopt-cu12>=25.5"]
 # The PySide6 control GUI is optional: solver workers and sandboxes never need it.
 gui = ["PySide6>=6.6"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]

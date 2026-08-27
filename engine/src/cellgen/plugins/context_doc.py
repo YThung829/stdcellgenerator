@@ -260,16 +260,23 @@ def render(tech: str) -> str:
         add(f"| `lgg.{name}{sig}` | {doc} |")
     add("")
 
-    add("### `inst.opt` — CP-SAT calls available")
+    add("### `inst.opt` — the model-building calls available")
     add("")
-    add("A `cp_model.CpModel` subclass that mirrors every call into a readable")
-    add("constraint log, which is how the UI shows what a plugin actually added.")
+    add("The model object mirrors every call into a readable constraint log,")
+    add("which is how the UI shows what a plugin actually added. Two backends")
+    add("implement this same surface: `CPSAT` (OR-Tools, the default) and")
+    add("`CUOPT` (NVIDIA cuOpt on a GPU, `--solver cuopt`). Stick to the calls")
+    add("below and a plugin runs on either one.")
     add("")
     add("| method | purpose |")
     add("|---|---|")
     wrapper_path = REPO_ROOT / "src" / "cellgen" / "solver" / "cpsat_wrapper.py"
     for sig, doc in extract_wrapper_methods(wrapper_path, "CPSAT"):
         add(f"| `opt.{sig}` | {doc} |")
+    add("")
+    add("`AddCircuit`, `AddCumulative`, `AddNoOverlap` and `NewIntervalVar`")
+    add("have no linear form and are CP-SAT-only: the cuOpt backend raises")
+    add("rather than approximating them. No built-in constraint uses them.")
     add("")
 
     add("## Worked examples: the built-in constraints")

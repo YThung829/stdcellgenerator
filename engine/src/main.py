@@ -30,6 +30,7 @@ from src.cellgen.archit import config
 from src.cellgen.core.entity import LayerStack
 from src.cellgen.core.errors import SolveFailed
 from src.cellgen.core.util import read_cdl_file
+from src.cellgen.solver.backends import BACKENDS
 from src.cellgen.archit.QFET.tech import QFET_Tech
 from src.cellgen.archit.CFET.tech import CFET_Tech
 from src.cellgen.archit.FinFET.tech import FinFET_Tech
@@ -74,7 +75,8 @@ class SMTCell:
     """Read circuits from a CDL and dispatch each to its solve orchestrator."""
 
     def __init__(self, cdl_file, cell_config, technology, circuit_names=None,
-                 output_dir="./output/", flag_log_constraints=False):
+                 output_dir="./output/", flag_log_constraints=False,
+                 solver="cpsat"):
         # Populate the PWR/GND/INPUT/OUTPUT net-name globals used by pin
         # assignment - must run once before any circuit is parsed.
         config.init()
@@ -83,6 +85,7 @@ class SMTCell:
         self.cell_config = cell_config
         self.output_dir = output_dir
         self.flag_log_constraints = flag_log_constraints
+        self.solver = solver
 
         all_circuits = read_cdl_file(cdl_file)
         if circuit_names:
@@ -98,8 +101,8 @@ class SMTCell:
             self.circuits = all_circuits
 
         logger.info(
-            f"{technology.TECHNOLOGY}: solving {len(self.circuits)} cell(s): "
-            f"{[c.subckt_name for c in self.circuits]}"
+            f"{technology.TECHNOLOGY} [{solver}]: solving {len(self.circuits)} "
+            f"cell(s): {[c.subckt_name for c in self.circuits]}"
         )
         self._gen_cell_lib()
 
@@ -120,11 +123,13 @@ class SMTCell:
                 output_dir=self.output_dir,
                 cell_config=self.cell_config,
                 flag_log_constraints=self.flag_log_constraints,
+                solver=self.solver,
                 **{tech_kwarg: self.technology},
             )
 
     def __repr__(self):
         return (f"SMTCell(tech={self.technology.TECHNOLOGY}, "
+                f"solver={self.solver}, "
                 f"cells={[c.subckt_name for c in self.circuits]})")
 
 
@@ -144,6 +149,8 @@ def _parse_args():
     p.add_argument("--output_dir", default="./output/", help="Output directory.")
     p.add_argument("--flag_log_constraints", default="False",
                    help="'True' to dump the constraint log, else 'False'.")
+    p.add_argument("--solver", default="cpsat", choices=list(BACKENDS),
+                   help="Solve backend: 'cpsat' (OR-Tools, CPU) or 'cuopt' (NVIDIA, GPU).")
     return p.parse_args()
 
 
@@ -169,6 +176,7 @@ def main():
             circuit_names=args.cell_names,
             output_dir=args.output_dir,
             flag_log_constraints=flag_log,
+            solver=args.solver,
         )
     except SolveFailed as exc:
         # The orchestrators used to call exit(1) from inside library code. They

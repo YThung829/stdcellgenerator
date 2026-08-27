@@ -25,7 +25,7 @@ Per-type seams:
     - tech:        CFET_Tech                  (archit/CFET/tech.py)
     - result:      write_cfet_result          (archit/CFET/util.py)
     - visualizer:  visualize_CFET_4T.{draw_layout_with_pin_and_routing, load_results}
-    - solver:      self.opt = CPSAT(logfile=...)
+    - solver:      self.opt = backends.make_model(self.solver_name, ...)
 
 CFET-specific routing helpers from the shared core, in constraint order:
     - rt.routing_localization_cfet            (NOT generic routing_localization)
@@ -66,7 +66,7 @@ from src.cellgen.core.graph import LayeredGridGraph
 from src.cellgen.core.objective import Objective
 from src.cellgen.core.util import log_variable_info, print_smtcell_banner
 from src.cellgen.core.variable import TransistorVar
-from src.cellgen.solver.cpsat_wrapper import CPSAT
+from src.cellgen.solver import backends
 # Gates every built-in constraint below, so an experiment can switch one off.
 from src.cellgen.plugins.builtins import apply
 
@@ -269,7 +269,10 @@ class CFET:
         """
         Create the optimization model from the selected solver backend.
 
-        Only "cpsat" is wired today; other backends raise NotImplementedError.
+        `cpsat` builds an OR-Tools CP-SAT model; `cuopt` builds the same model
+        lowered to linear rows for NVIDIA cuOpt's GPU MILP solver. Both expose
+        the same model-building API, so no constraint below changes.
+
         When `flag_log_constraints` is True, every constraint is mirrored to
         `<output_dir>/constraint/<subckt>.log` by the backend wrapper.
         """
@@ -277,15 +280,7 @@ class CFET:
             f"{self.output_dir}/constraint/{self.circuit.subckt_name}.log"
             if flag_log_constraints else None
         )
-        builders = {
-            "cpsat": lambda: CPSAT(logfile=logfile),
-        }
-        if self.solver_name not in builders:
-            raise NotImplementedError(
-                f"Solver backend {self.solver_name!r} is not supported. "
-                f"Available: {sorted(builders)}."
-            )
-        self.opt = builders[self.solver_name]()
+        self.opt = backends.make_model(self.solver_name, logfile)
 
     def _init_subsystems(self):
         """Initialize tech, graph, CP-SAT variable domain, variables, region caches."""
@@ -2427,14 +2422,19 @@ class CFET:
 
     def wsum(self, solve_setting, objectives=None, exit_on_unsat=True):
         """
-        Weighted-sum CP-SAT solve. Applies the configured model_preset, sums
-        weighted objectives, runs `solver.Solve`. Returns (total_obj_expr,
+        Weighted-sum solve on the configured backend. Applies the model_preset,
+        sums weighted objectives, runs `solver.Solve`. Returns (total_obj_expr,
         ObjectiveValue) on success; honors exit_on_unsat for UNSAT/UNKNOWN.
+
+        The model_preset block below is CP-SAT search tuning. The cuOpt solver
+        accepts the same attribute names so this code runs unchanged, and
+        reports which of them it cannot honour; none of them is part of the
+        model, so the objective assembled here is identical either way.
         """
         import time
 
         self.opt.log_comment("Defining the objective function ...")
-        self.solver = cp_model.CpSolver()
+        self.solver = backends.make_solver(self.solver_name, self.cell_config)
         self.solver.parameters.num_search_workers = self.cell_config["num_search_workers"]["value"]
         self.solver.parameters.random_seed = self.cell_config["seed"]["value"]
         self.solver.parameters.log_search_progress = True

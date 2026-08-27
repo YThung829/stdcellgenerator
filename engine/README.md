@@ -90,9 +90,10 @@ SMTCell is built on **Python 3** and is designed to run on **Linux**-based opera
 | `numpy` | ≥ 2.2.6 | Data handling |
 | `networkx` | ≥ 3.4.2 | Graph operations |
 | `scikit-learn` | ≥ 1.7.0 | Clustering |
-| `ortools` | ≥ 9.14.6206 | CP-SAT solver |
+| `ortools` | ≥ 9.14.6206 | CP-SAT solver (default backend) |
 | `matplotlib` | ≥ 3.10.3 | Canvas plotting |
 | `klayout` | ≥ 0.30.2 | GDS generation |
+| `cuopt-cu12` | ≥ 25.5 | *optional* — GPU MILP backend (`--solver cuopt`); needs a CUDA GPU |
 
 > Other versions of these packages may work but are not rigorously tested.
 
@@ -192,6 +193,7 @@ Bundled presets: `FinFET_4T_SH`, `CFET_4T_SH`, `QFET_4T_SH`.
 | `CELL_NAME` | One or more cells to generate. List several by ending each line with `\`. |
 | `CELL_PREFIX` | Cell/library prefix (default `PROBE3`). |
 | `FLAG_LOG_CONSTR` | Dump a human-readable constraint log per cell (default `False`). |
+| `SOLVER` | Solve backend — `cpsat` (default) or `cuopt`. Set on the command line, not in the preset. |
 
 > [!WARNING]
 > `FLAG_LOG_CONSTR` is for advanced users only — it can easily generate files larger than 500 MB. Keep it off when not in use.
@@ -203,7 +205,7 @@ Pass the same `CONFIG=<preset>` to every stage:
 | Command | Description |
 |---|---|
 | `make config CONFIG=<preset>` | Generate the per-cell `.json` configs under `output/<lib>/<height>/config/`. **Idempotent** — existing configs are kept; pass `FORCE=1` to regenerate them from the preset. |
-| `make spnr CONFIG=<preset>` | Run the core solve (CP-SAT) and write the result (`.res`) under `.../result/`. A successful run overwrites the existing `.res`. |
+| `make spnr CONFIG=<preset>` | Run the core solve and write the result (`.res`) under `.../result/`. A successful run overwrites the existing `.res`. Add `SOLVER=cuopt` to solve on a GPU — see [Solver Backends](#solver-backends). |
 | `make gds CONFIG=<preset>` | Read the result and emit the `.gds` (standalone; no solving). |
 | `make lef CONFIG=<preset>` | Generate a `.lef` abstract from the GDS. |
 | `make status CONFIG=<preset>` | Print per-cell solve status and runtime from the logs. |
@@ -216,6 +218,37 @@ make gds    CONFIG=FinFET_4T_SH
 
 > [!CAUTION]
 > `make spnr` overwrites the existing `.res` on a successful run — back up results you want to keep, or generate into a separate output directory. (`make config` keeps an already-generated per-cell config unless you pass `FORCE=1`.)
+
+---
+
+## Solver Backends
+
+The constraint stack is written once and can be handed to either solver. Pick one with `SOLVER=` (Makefile) or `--solver` (CLI):
+
+| Backend | Solver | Hardware | Install |
+|---|---|---|---|
+| `cpsat` *(default)* | OR-Tools CP-SAT | CPU, multi-core | included in the base requirements |
+| `cuopt` | NVIDIA cuOpt MILP | CUDA GPU | `pip install "cellgen-engine[cuopt]"` |
+
+```bash
+make spnr CONFIG=FinFET_4T_SH SOLVER=cuopt
+
+python -m src.cellgen.run --preset FinFET_4T_SH --cell INV_X1 \
+    --output-dir runs/gpu --solver cuopt
+```
+
+**The model is the same either way.** `src/cellgen/solver/milp.py` lowers every CP-SAT construct the engine uses — reified `OnlyEnforceIf` constraints, `!=`, domains with holes, `AddMaxEquality` / `AddMinEquality`, `AddAllDifferent`, boolean products — into linear rows that admit exactly the assignments CP-SAT admits, and the objective stays the same integer expression. `tests/test_cuopt_backend.py` proves this construct by construct by enumerating both models, and end to end by solving whole cells both ways and comparing the optimum.
+
+What does *not* carry across is CP-SAT's search tuning. `model_preset` (`SET`) selects subsolvers, probing and symmetry levels, a branching strategy and a random seed; none of those describe the model, and cuOpt's GPU branch-and-bound has no equivalent, so they are logged as ignored. The time limit (`max_time`) and the relative gap (`use_relative_gap`) do carry across. Anything cuOpt-specific goes in the cell config under `cuopt_parameters`, and is passed to cuOpt's `set_parameter` unchanged:
+
+```jsonc
+"cuopt_parameters": {"value": {"mip_heuristics_only": true}}
+```
+
+Because cuOpt returns doubles, every integer variable is rounded and the whole solution is then re-checked against every row exactly. A result that does not satisfy them is reported as `UNKNOWN` rather than written out as a layout.
+
+> [!NOTE]
+> Two search features are CP-SAT-only and are dropped with a log line rather than silently: `AddDecisionStrategy` (branching order) and partial `AddHint`s. cuOpt takes a complete starting point or none, so a hint covering only some variables is dropped rather than padded with invented values. Neither affects which layouts are legal or what they cost.
 
 ---
 

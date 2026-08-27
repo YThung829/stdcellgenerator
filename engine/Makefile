@@ -61,6 +61,9 @@ include input/presets/$(CONFIG).mk
 # Derived variables
 CELL_PREFIX ?= PROBE3
 FLAG_LOG_CONSTR ?= False
+# Solve backend: cpsat (OR-Tools, CPU) or cuopt (NVIDIA cuOpt MILP, needs a
+# CUDA GPU and `pip install cuopt-cu12`). Both build the same model.
+SOLVER ?= cpsat
 LIBNAME=$(CELL_PREFIX)_$(TECH)_$(CHANNEL)_$(TRACK)T_$(CPP)$(M1P)OF$(M1OF)
 
 
@@ -135,6 +138,7 @@ spnr:
 			--netlist $(CDL_FILE) \
 			--cell_names $(CELL) \
 			--output_dir $(OUT_DIR) \
+			--solver $(SOLVER) \
 			--flag_log_constraints $(FLAG_LOG_CONSTR) \
 			2>&1 | tee $(OUT_DIR)/logs/$(CELL).log;)
 

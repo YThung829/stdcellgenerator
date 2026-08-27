@@ -40,6 +40,7 @@ from src.cellgen.archit.config import _parse_overrides, generate_config
 from src.cellgen.core.entity import LayerStack
 from src.cellgen.core.errors import SolveFailed
 from src.cellgen.io.presets import parse_preset_dict
+from src.cellgen.solver.backends import BACKENDS
 from src.cellgen import plugins
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -167,6 +168,7 @@ def solve_cell(
     output_dir: Path,
     *,
     flag_log_constraints: bool = False,
+    solver: str = "cpsat",
 ) -> None:
     """Solve one cell into ``output_dir``. Raises :class:`SolveFailed` on failure.
 
@@ -190,13 +192,14 @@ def solve_cell(
         circuit_names=[cell],
         output_dir=str(output_dir),
         flag_log_constraints=flag_log_constraints,
+        solver=solver,
     )
 
 
 class _Tee:
     """Duplicate writes to the real stream and to a log file.
 
-    CP-SAT's search log goes through ``print`` (the orchestrators set
+    The solver's search log goes through ``print`` (the orchestrators set
     ``solver.log_callback = print``), so capturing it needs a stdout wrapper;
     loguru writes to stderr and gets its own sink. Together these reproduce
     the Makefile's ``2>&1 | tee $(OUT_DIR)/logs/$(CELL).log``.
@@ -227,12 +230,16 @@ def run(
     overrides: list[str] | None = None,
     flag_log_constraints: bool = False,
     plugin_dir: Path | str | None = None,
+    solver: str = "cpsat",
     repo_root: Path = REPO_ROOT,
 ) -> dict[str, str]:
     """Resolve the preset, generate configs, and solve each cell.
 
+    ``solver`` picks the backend: ``"cpsat"`` (OR-Tools, CPU) or ``"cuopt"``
+    (NVIDIA cuOpt, GPU). Both build the same constraints and the same objective.
+
     Returns ``{cell: "ok" | "<failure status>" | "ERROR"}``. A cell that fails
-    never aborts the rest of the batch: CP-SAT failures surface as their status
+    never aborts the rest of the batch: solve failures surface as their status
     name, and any other exception (a bad config, or a user-authored constraint
     plugin raising) is recorded as ``"ERROR"`` with its traceback in that cell's
     log.
@@ -284,6 +291,7 @@ def run(
                 "layer_file": str(cfg.layer_file),
                 "cells": cells,
                 "overrides": merged,
+                "solver": solver,
                 "plugins": [
                     {"id": s.plugin.id, "stage": s.plugin.stage, "params": s.params}
                     for s in plugins.active()
@@ -307,7 +315,9 @@ def run(
             sys.stdout = _Tee(real_stdout, handle)
             t0 = time.time()
             try:
-                solve_cell(cfg, cell, out, flag_log_constraints=flag_log_constraints)
+                solve_cell(cfg, cell, out,
+                           flag_log_constraints=flag_log_constraints,
+                           solver=solver)
                 results[cell] = "ok"
             except SolveFailed as exc:
                 logger.error(str(exc))
@@ -366,8 +376,11 @@ def _parse_args(argv=None):
     p.add_argument("--plugin-dir", type=Path, default=None,
                    help="Directory of constraint plugins (*.py plus an optional "
                         "manifest.json). Without a manifest every plugin found runs.")
+    p.add_argument("--solver", default="cpsat", choices=list(BACKENDS),
+                   help="Solve backend: 'cpsat' (OR-Tools CP-SAT, CPU) or 'cuopt' "
+                        "(NVIDIA cuOpt MILP, GPU). Same model either way.")
     p.add_argument("--flag-log-constraints", action="store_true",
-                   help="Dump every CP-SAT constraint to constraint/<cell>.log (can exceed 500 MB).")
+                   help="Dump every constraint to constraint/<cell>.log (can exceed 500 MB).")
     p.add_argument("--list-cells", action="store_true",
                    help="Print the cells available in the preset's netlist and exit.")
     args = p.parse_args(argv)
@@ -397,6 +410,7 @@ def main(argv=None) -> int:
         overrides=args.override,
         flag_log_constraints=args.flag_log_constraints,
         plugin_dir=args.plugin_dir,
+        solver=args.solver,
     )
 
     failed = {c: s for c, s in results.items() if s != "ok"}

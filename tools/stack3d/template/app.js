@@ -129,11 +129,16 @@ function fitView(){
   if (!any){ orb.tx = 45; orb.ty = 60; orb.tz = -72; orb.dist = 420; return; }
   const c = box.getCenter(new THREE.Vector3());
   const r = box.getSize(new THREE.Vector3()).length() / 2;
-  orb.tx = c.x; orb.ty = c.y; orb.tz = c.z;
+  orb.tx = c.x; orb.tz = c.z;
+  // The HUD floats over the bottom of the stage. Bias the framing upward by
+  // that much so a deep stack's lowest layers (QFET's backside metals) are
+  // not parked behind the controls. Proportional, so it holds at any height.
+  const stageH = canvas.clientHeight || 1;
+  orb.ty = c.y - r * (76 / stageH);
   if (!userZoom){
     const vfov = camera.fov * Math.PI / 180;
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
-    orb.dist = r / Math.sin(Math.min(vfov, hfov) / 2) * 1.08;
+    orb.dist = r / Math.sin(Math.min(vfov, hfov) / 2) * 1.16;
   }
 }
 

@@ -1,0 +1,818 @@
+<title>SMTCell 製程立體剖析</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* ---- Single committed visual world: a mask-layout instrument panel.
+       Every colour is painted explicitly so the page holds on any host ground. ---- */
+:root{
+  --ground:#080c11;
+  --ground-2:#0d131a;
+  --panel:#111922;
+  --panel-2:#16212c;
+  --rule:#22303d;
+  --rule-soft:#1a2530;
+  --ink:#d9e4ee;
+  --ink-2:#9db0c2;
+  --ink-dim:#6d8093;
+  --accent:#ff7a45;
+  --accent-2:#ffb08a;
+  --accent-dim:rgba(255,122,69,.14);
+  --good:#5ee0c8;
+  --stage:#060a0e;
+  --shadow:0 18px 44px rgba(0,0,0,.55);
+  --fs-body:15px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:'IBM Plex Sans','Noto Sans TC',system-ui,-apple-system,sans-serif;
+  font-size:var(--fs-body);
+  line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.disp{
+  font-family:'IBM Plex Sans Condensed','Noto Sans TC',system-ui,sans-serif;
+  text-wrap:balance;
+  margin:0;
+}
+code,.mono,kbd{font-family:'IBM Plex Mono',ui-monospace,'SFMono-Regular',monospace}
+a{color:var(--accent-2);text-underline-offset:3px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+
+/* ---------- top bar ---------- */
+.topbar{
+  display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+  padding:14px clamp(16px,3.5vw,40px);
+  border-bottom:1px solid var(--rule);
+  background:linear-gradient(180deg,var(--ground-2),var(--ground));
+  position:sticky;top:0;z-index:20;
+}
+.brand{display:flex;align-items:baseline;gap:10px;margin-right:auto}
+.brand b{font-family:'IBM Plex Sans Condensed','Noto Sans TC',sans-serif;font-size:19px;font-weight:700;letter-spacing:.01em}
+.brand span{font-size:12px;color:var(--ink-dim);letter-spacing:.14em;text-transform:uppercase;font-weight:500}
+.seg{display:flex;border:1px solid var(--rule);border-radius:7px;overflow:hidden;background:var(--panel)}
+.seg button{
+  appearance:none;border:0;background:transparent;color:var(--ink-2);
+  font:600 13px/1 'IBM Plex Mono',monospace;letter-spacing:.04em;
+  padding:9px 16px;cursor:pointer;border-right:1px solid var(--rule-soft);transition:.14s;
+}
+.seg button:last-child{border-right:0}
+.seg button:hover{color:var(--ink);background:var(--panel-2)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#12070200;color:#180a03;text-shadow:none}
+.cellchip{
+  font:500 12px/1 'IBM Plex Mono',monospace;color:var(--ink-dim);
+  border:1px dashed var(--rule);border-radius:6px;padding:7px 11px;
+}
+.cellchip b{color:var(--good);font-weight:600}
+
+/* ---------- spec strip ---------- */
+.specs{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
+  gap:1px;background:var(--rule-soft);
+  border-bottom:1px solid var(--rule);
+}
+.spec{background:var(--ground-2);padding:12px clamp(14px,2vw,20px)}
+.spec dt{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-dim);font-weight:600;margin:0 0 3px}
+.spec dd{margin:0;font:500 13.5px/1.45 'IBM Plex Mono',monospace;color:var(--ink);word-break:break-word}
+
+/* ---------- viewer ---------- */
+.viewer{display:grid;grid-template-columns:308px 1fr;min-height:0}
+@media (max-width:900px){.viewer{grid-template-columns:1fr}}
+.rail{
+  border-right:1px solid var(--rule);background:var(--ground-2);
+  display:flex;flex-direction:column;max-height:660px;
+}
+@media (max-width:900px){.rail{max-height:290px;border-right:0;border-bottom:1px solid var(--rule)}}
+.rail-head{padding:13px 16px 10px;border-bottom:1px solid var(--rule-soft)}
+.rail-head h2{font-size:13px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-dim);font-weight:600}
+.rail-head p{margin:5px 0 0;font-size:12px;line-height:1.6;color:var(--ink-dim)}
+.chips{display:flex;flex-wrap:wrap;gap:5px;padding:10px 14px;border-bottom:1px solid var(--rule-soft)}
+.chip{
+  appearance:none;border:1px solid var(--rule);background:transparent;color:var(--ink-2);
+  font:500 11.5px/1 'IBM Plex Sans','Noto Sans TC',sans-serif;padding:5px 9px;border-radius:99px;cursor:pointer;transition:.13s;
+}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--accent-dim);border-color:var(--accent);color:var(--accent-2)}
+.rail-list{overflow-y:auto;flex:1;padding:6px 0 14px}
+.lrow{
+  display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:9px;
+  width:100%;text-align:left;appearance:none;background:transparent;border:0;
+  border-left:2px solid transparent;
+  padding:6px 14px 6px 12px;cursor:pointer;color:inherit;font:inherit;transition:background .12s;
+}
+.lrow:hover{background:var(--panel)}
+.lrow[data-on="0"]{opacity:.34}
+.lrow[data-empty="1"] .lname{color:var(--ink-dim);font-style:italic}
+.sw{width:14px;height:14px;border-radius:3px;border:1px solid rgba(255,255,255,.22)}
+.lrow[data-on="0"] .sw{background:transparent !important}
+.lname{font:600 13px/1.3 'IBM Plex Mono',monospace;letter-spacing:-.01em}
+.lmeta{font-size:11px;color:var(--ink-dim);line-height:1.35;font-family:'IBM Plex Mono',monospace}
+.lz{font:500 11px/1.3 'IBM Plex Mono',monospace;color:var(--ink-dim);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.stage{position:relative;background:var(--stage);min-height:520px}
+#gl{display:block;width:100%;height:100%}
+.hud{
+  position:absolute;left:16px;bottom:16px;right:16px;
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:11px 15px;border:1px solid var(--rule);border-radius:9px;
+  background:rgba(13,19,26,.86);backdrop-filter:blur(9px);box-shadow:var(--shadow);
+}
+.hud label{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-dim);font-weight:600;white-space:nowrap}
+.hud input[type=range]{accent-color:var(--accent);width:150px;vertical-align:middle}
+.hud .val{font:500 12px/1 'IBM Plex Mono',monospace;color:var(--accent-2);min-width:34px;display:inline-block;font-variant-numeric:tabular-nums}
+.hud button{
+  appearance:none;border:1px solid var(--rule);background:var(--panel);color:var(--ink-2);
+  font:500 12px/1 'IBM Plex Sans','Noto Sans TC',sans-serif;padding:7px 12px;border-radius:6px;cursor:pointer;transition:.13s;
+}
+.hud button:hover{border-color:var(--accent);color:var(--ink)}
+.hud .hint{margin-left:auto;font-size:11px;color:var(--ink-dim);white-space:nowrap}
+.axes{
+  position:absolute;top:14px;left:16px;font:500 11px/1.7 'IBM Plex Mono',monospace;color:var(--ink-dim);
+  border-left:2px solid var(--accent);padding-left:9px;pointer-events:none;
+}
+.axes b{color:var(--ink-2);font-weight:600}
+#tip{
+  position:absolute;pointer-events:none;opacity:0;transition:opacity .12s;
+  border:1px solid var(--rule);background:rgba(9,14,19,.95);border-radius:7px;
+  padding:9px 12px;max-width:290px;box-shadow:var(--shadow);z-index:5;
+}
+#tip .t-n{font:600 13px/1.3 'IBM Plex Mono',monospace;color:var(--accent-2)}
+#tip .t-m{font:400 11px/1.4 'IBM Plex Mono',monospace;color:var(--ink-dim);margin-top:2px}
+#tip .t-d{font-size:12px;line-height:1.55;color:var(--ink-2);margin-top:6px}
+
+/* ---------- prose ---------- */
+main.doc{max-width:1180px;margin:0 auto;padding:0 clamp(16px,4vw,40px) 90px}
+section.blk{padding-top:56px}
+.eyebrow{
+  font:600 11px/1 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 10px;
+}
+section.blk > h2{font-size:clamp(23px,3.1vw,31px);font-weight:700;letter-spacing:-.005em;line-height:1.25}
+section.blk > .lede{max-width:66ch;color:var(--ink-2);margin:12px 0 0;font-size:16px}
+h3{font-size:17px;font-weight:600;margin:34px 0 8px;letter-spacing:-.005em}
+p{margin:12px 0;max-width:74ch}
+ul,ol{max-width:74ch;padding-left:20px;margin:12px 0}
+li{margin:6px 0}
+code{
+  font-size:.885em;background:var(--panel-2);border:1px solid var(--rule-soft);
+  border-radius:4px;padding:1px 5px;color:var(--accent-2);
+}
+.ref{font:500 11.5px/1 'IBM Plex Mono',monospace;color:var(--ink-dim)}
+
+.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--rule);border-radius:9px;background:var(--ground-2)}
+table{border-collapse:collapse;width:100%;min-width:660px;font-size:13.5px}
+th,td{padding:11px 15px;text-align:left;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+thead th{
+  font:600 11px/1.4 'IBM Plex Mono',monospace;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--ink-dim);background:var(--panel);border-bottom:1px solid var(--rule);white-space:nowrap;
+}
+tbody th{font-weight:600;color:var(--ink);white-space:nowrap;font-size:13px}
+td{color:var(--ink-2)}
+td .mono{color:var(--ink);font-size:12.5px}
+tbody tr:last-child th,tbody tr:last-child td{border-bottom:0}
+
+pre{
+  margin:16px 0;padding:15px 17px;overflow-x:auto;
+  background:var(--ground-2);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:0 8px 8px 0;font-size:12.5px;line-height:1.7;color:var(--ink-2);
+}
+pre b{color:var(--ink);font-weight:600}
+pre i{color:var(--ink-dim);font-style:normal}
+pre u{color:var(--good);text-decoration:none}
+
+.steps{list-style:none;padding:0;margin:24px 0;counter-reset:s;max-width:100%}
+.steps > li{
+  counter-increment:s;position:relative;padding:0 0 0 46px;margin:0 0 22px;max-width:74ch;
+}
+.steps > li::before{
+  content:counter(s,decimal-leading-zero);position:absolute;left:0;top:1px;
+  font:600 12px/1.55 'IBM Plex Mono',monospace;color:var(--accent);
+  border:1px solid var(--rule);border-radius:5px;width:30px;text-align:center;background:var(--panel);
+}
+.steps h3{margin:0 0 4px;font-size:15.5px}
+.steps p{margin:4px 0}
+
+.note{
+  border:1px solid var(--rule);border-radius:9px;background:var(--ground-2);
+  padding:15px 18px;margin:22px 0;max-width:78ch;
+}
+.note b{color:var(--accent-2)}
+.note p:first-child{margin-top:0}
+.note p:last-child{margin-bottom:0}
+
+figure{margin:26px 0}
+figure svg{display:block;width:100%;height:auto;max-width:820px}
+figcaption{font-size:12.5px;color:var(--ink-dim);margin-top:9px;max-width:74ch;line-height:1.6}
+
+.pipe{display:flex;flex-wrap:wrap;gap:0;align-items:stretch;margin:24px 0;border:1px solid var(--rule);border-radius:9px;overflow:hidden}
+.pipe > div{flex:1 1 150px;padding:14px 16px;border-right:1px solid var(--rule-soft);background:var(--ground-2);min-width:0}
+.pipe > div:last-child{border-right:0}
+.pipe .k{font:600 11px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:6px}
+.pipe .f{font:500 12.5px/1.45 'IBM Plex Mono',monospace;color:var(--ink);word-break:break-all}
+.pipe .d{font-size:12px;color:var(--ink-dim);margin-top:5px;line-height:1.55}
+
+footer{border-top:1px solid var(--rule);padding:26px clamp(16px,4vw,40px) 40px;color:var(--ink-dim);font-size:12.5px}
+footer p{max-width:80ch;margin:6px 0}
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+</style>
+
+<header class="topbar">
+  <div class="brand">
+    <b>SMTCell 製程立體剖析</b>
+    <span>INV_X1 · 4-track SH</span>
+  </div>
+  <div class="cellchip">實際跑出來的解 · <b id="chip-obj">—</b></div>
+  <div class="seg" role="group" aria-label="選擇製程架構">
+    <button type="button" data-tech="FinFET" aria-pressed="false">FinFET</button>
+    <button type="button" data-tech="CFET" aria-pressed="true">CFET</button>
+    <button type="button" data-tech="QFET" aria-pressed="false">QFET</button>
+  </div>
+</header>
+
+<dl class="specs" id="specs"></dl>
+
+<div class="viewer">
+  <aside class="rail">
+    <div class="rail-head">
+      <h2>Layer Stack</h2>
+      <p>由上而下就是這顆 cell 的剖面。點一列開關該層，z 值為示意厚度。</p>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="rail-list" id="rail"></div>
+  </aside>
+  <div class="stage">
+    <canvas id="gl"></canvas>
+    <div class="axes"><b>X</b> cell 寬 (CPP 方向)<br><b>Y</b> 堆疊高度 z<br><b>Z</b> cell 高 (track 方向)</div>
+    <div id="tip" role="status"></div>
+    <div class="hud">
+      <label for="ex">分層展開</label>
+      <input id="ex" type="range" min="0" max="100" value="22" aria-label="分層展開程度">
+      <span class="val" id="exv">0.22</span>
+      <button type="button" id="btn-reset">重設視角</button>
+      <button type="button" id="btn-all">全部開啟</button>
+      <span class="hint">拖曳旋轉 · 滾輪縮放 · 右鍵平移</span>
+    </div>
+  </div>
+</div>
+
+<main class="doc">
+
+<section class="blk">
+  <p class="eyebrow">Where the geometry comes from</p>
+  <h2>上面每一塊多邊形，都是這個 repo 真的解出來的</h2>
+  <p class="lede">我在這個容器裡對三個 preset 各跑了一次 <code>INV_X1</code>，把產生的 GDS 用 KLayout 讀回來、抽出每一個 polygon，再依製程堆疊順序給它一個 z 區間畫成立體圖。所以形狀是真的，厚度是示意的 — 原因見最後一段。</p>
+  <div class="pipe">
+    <div><span class="k">Netlist</span><span class="f">input/cdl/PROBE_2F4T.cdl</span><span class="d">.SUBCKT INV_X1 I VDD VSS ZN</span></div>
+    <div><span class="k">Layer stack</span><span class="f">input/layer/PROBE3_*.json</span><span class="d">每層的 direction / pitch / offset / width</span></div>
+    <div><span class="k">Solve</span><span class="f">src.cellgen.run</span><span class="d">CP-SAT 同時做 placement + routing</span></div>
+    <div><span class="k">Result</span><span class="f">result/INV_X1.res</span><span class="d">純文字：放置表 + 繞線線段表</span></div>
+    <div><span class="k">GDS</span><span class="f">postprocess/gds_*_SH.py</span><span class="d">把 .res 翻成 KLayout 的 Box</span></div>
+  </div>
+  <p>三次解的結果分別是 FinFET <code>obj=1021</code>、CFET <code>obj=1034</code>、QFET <code>obj=999</code>，都是 2 顆電晶體、<code>COL=2</code>。FinFET / CFET 的 CPP 是 45nm 所以 cell 寬 90nm；QFET 的 preset 用 CPP 42，所以只有 84nm。cell 高都是 144nm（4 track × M0 pitch 24 × ... 見下）。</p>
+</section>
+
+<section class="blk">
+  <p class="eyebrow">Three architectures</p>
+  <h2>三種架構差在哪：放置層的數量與位置</h2>
+  <p class="lede">程式裡三個架構共用同一套 core（graph / placement / routing / rule），差別幾乎全部集中在「有幾個 placement layer、它們在 z 軸的哪裡、彼此之間怎麼連」。</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>面向</th><th>FinFET</th><th>CFET</th><th>QFET</th></tr></thead>
+    <tbody>
+      <tr><th>幾何本質</th><td>單層平面：P/N 左右分列在同一平面的上下兩個 row band</td><td>2 層垂直堆疊：一顆元件直接壓在另一顆上面，共用同一個 column footprint</td><td>正面 + 背面兩個 tier，中間夾一組層間繞線</td></tr>
+      <tr><th><code>placement_layer_names</code></th><td><span class="mono">{PC}</span></td><td><span class="mono">{PC, BPC}</span></td><td><span class="mono">{PC1, BPC1}</span></td></tr>
+      <tr><th><code>pin_access_layer_names</code></th><td><span class="mono">{M0}</span></td><td><span class="mono">{BPC, M0}</span></td><td><span class="mono">{BM0, M0}</span></td></tr>
+      <tr><th>P / N 怎麼分</th><td>靠 row：NMOS 放 row 0、PMOS 放 row 2</td><td>靠 tier：<code>stacking_config</code> = <span class="mono">P_on_N</span> 或 <span class="mono">N_on_P</span>，決定誰在 PC 誰在 BPC</td><td>靠 row（同 FinFET），tier 由 solver 自己選 <span class="mono">z_var</span></td></tr>
+      <tr><th>LGG z 順序<br><span class="ref">(metal_layers 依 layer_number 排序)</span></th><td class="mono">PC · M0 · M1 · M2</td><td class="mono">BPC · PC · M0 · M1 · M2</td><td class="mono">BM1 · BM0 · BPC1 · H0 · H1 · PC1 · M0 · M1</td></tr>
+      <tr><th>虛擬邊 (virtual edge)</th><td>無</td><td><span class="mono">("BPC","M0")</span>，method <span class="mono">boundary</span>，寫死在 <code>_init_graph</code></td><td><span class="mono">VL1: BPC1↔PC1</span>，method <span class="mono">overlap</span>，由 layer JSON 的 <span class="mono">"layer_type":"virtual"</span> 宣告</td></tr>
+      <tr><th>MOL 當繞線資源</th><td>可選（<code>lig_routing</code> / <code>lisd_routing</code> 預設 false）</td><td>強制開啟 — <code>config.py</code> 看到 <span class="mono">tech=="CFET"</span> 就把兩個 flag 設 true</td><td>由 preset 的 <code>CONFIG_OVERRIDES</code> 打開</td></tr>
+      <tr><th>preset</th><td class="mono">FinFET_4T_SH.mk<br>CPP 45 / M1P 30 / OF 0</td><td class="mono">CFET_4T_SH.mk<br>CPP 45 / M1P 30 / OF 0</td><td class="mono">QFET_4T_SH.mk<br>CPP 42 / M1P 42 / OF 21</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">
+    <p><b>看 CFET 立體圖時注意這件事：</b>把上面的 viewer 切到 CFET，會發現 <code>N_ACTIVE</code>(11/2) 和 <code>P_ACTIVE</code>(11/1) 的 x/y 邊界一模一樣 — 都是 <span class="mono">x[15.5, 74.5] y[19, 125]</span>。這不是畫錯，這正是 CFET：兩顆元件佔用同一塊平面面積，只差在 z。GDS 是平面格式，它只能用 datatype（<span class="mono">/1</span> vs <span class="mono">/2</span>）來區分上下 tier，所以在 2D layout viewer 裡兩層是完全疊死的 — 立體圖才把這個差別攤開。</p>
+  </div>
+  <p>同理，CFET 的 gate 在 GDS 裡只有一根 <span class="mono">7/0</span> 的柱子貫穿整個 cell 高度：實體上 CFET 的 gate stack 本來就穿過上下兩顆元件，所以 writer 不需要（也不能）畫成兩根。我在立體圖裡把它的 z 區間設成 <span class="mono">0 → 150</span> 橫跨兩個 tier，就是要凸顯這件事。</p>
+</section>
+
+<section class="blk">
+  <p class="eyebrow">Routing space</p>
+  <h2>繞線空間是怎麼 initialize 出來的</h2>
+  <p class="lede">整個 solver 看到的世界就是一張 <code>LayeredGridGraph</code>（<span class="ref">core/graph.py</span>）。節點是 <span class="mono">(layer_idx, row, col)</span>，邊是「同層可以走的一步」或「跨層的一個 via」。三個架構的 <code>_init_graph()</code> 做的事情就是算出每一層有哪些 row / col，然後把這張圖建出來。</p>
+
+  <ol class="steps">
+    <li>
+      <h3>讀 layer JSON → <code>LayerStack</code></h3>
+      <p><span class="ref">core/entity.py:864</span> 把 JSON 依 <code>layer_type</code> 拆成四類：<code>metal</code>（有 direction/pitch/offset/width，會進 graph）、<code>via</code>（只記 lower/upper，決定哪兩層相鄰）、<code>virtual</code>（純圖上的捷徑，沒有實體）、<code>gds</code>（solver 完全看不到，只給 GDS writer 用，例如 ACTIVE / WELL / FIN / SELECT）。</p>
+      <p>metal 依 <code>layer_number</code> 由小到大排序，排完的 index 就是 <b>LGG 的 z-index</b>。QFET 的 <code>.res</code> 裡繞線線段寫 <span class="mono">MET 5 / 6 / 7</span>，對照 stack 就是 <span class="mono">PC1 / M0 / M1</span> — 這個對應關係是自動長出來的，不是寫死的。</p>
+    </li>
+    <li>
+      <h3>算 canvas 大小</h3>
+      <pre><b>canvas_width</b>  = num_col      × <i>placement layer 的 pitch</i>
+<b>canvas_height</b> = num_rt_track × <i>M0 的 pitch</i> × 2</pre>
+      <p>QFET 這裡有一段值得看的註解（<span class="ref">QFET/main.py:_compute_canvas_dimensions</span>）：FinFET / CFET 都直接用 <code>metal_layers[0].pitch</code>，因為它們的第 0 層剛好就是 placement layer（PC / BPC）。但 QFET 的第 0 層是 <b>BM1</b>（背面金屬），用它會讓 canvas 窄掉 2/3、最後一個合法 column 被 <code>[:-1]</code> 砍掉。所以 QFET 改成明確去問 <code>get_pitch(default_placement_layer)</code>。這是三份 <code>_init_graph</code> 唯一一個「不能照抄」的地方。</p>
+    </li>
+    <li>
+      <h3>倍解析度座標系（half-pitch convention）</h3>
+      <p>這是整份程式最容易看不懂的一招。Gate 落在整數 column 上，source/drain 落在兩個 gate 中間的半格上。為了讓兩者都是整數，模型把整個座標空間 <b>放大兩倍</b>：</p>
+      <pre>placement layer : pitch 保持原值      <i>(本來就是半格解析度)</i>
+其他所有 layer  : pitch × 2         <i>(對齊到 placement 格點)</i>
+offset          : × 2               <i>(FinFET / QFET；CFET 沒有乘)</i></pre>
+      <p>下游要還原成實體 nm 時就除以 2 — 這就是三個 GDS writer 開頭都有的 <code>SOLVER_RESCALE = 2.0</code>。</p>
+      <p>由此得到 column 的奇偶約定：<b>偶數 index = gate 欄，奇數 index = source/drain 欄</b>。<code>_init_domain()</code> 就是靠 <code>col_indices_in_layer(layer, parity="even"/"odd")</code> 把 CP-SAT 的 domain 切出來。</p>
+      <figure id="fig-grid"></figure>
+    </li>
+    <li>
+      <h3>每層要有哪些 row / col</h3>
+      <p>規則很單純：<b>V 方向的層貢獻 columns，H 方向的層貢獻 rows</b>。缺的那一軸由 <code>LayeredGridGraph._infer_from_nearest()</code> 從 z 軸上最近、有該資料的層合併過來（不限相鄰 ±1，因為 QFET 有連續好幾層都是 V 方向）。</p>
+      <p>CFET 在這裡加了一個很省的手腳（<span class="ref">CFET/main.py:_init_graph</span>）：上層 placement layer（PC）拿到<b>全部</b> M0 rows，下層（BPC）只拿 <b>頭尾兩個 boundary rows</b>。中間的 row 對下層元件既沒有 pin 也接不到 via，留著只會讓模型變大。</p>
+    </li>
+    <li>
+      <h3>建圖：節點、同層邊、via 邊</h3>
+      <pre><b>節點</b>   每層 product(rows, cols) 各一個 (z, r, c)
+<b>同層邊</b> direction=="H" → 只連左右鄰 col
+         direction=="V" → 只連上下鄰 row
+<b>via 邊</b> 連到 z±1，<u>但前提是同一個 (r, c) 在那一層也存在</u></pre>
+      <p>最後這個條件就是 pitch 對齊在做的事：兩層的格點如果對不上，它們之間就長不出 via 邊。QFET 的 M1 用 <span class="mono">pitch 42 / offset 21</span> 而 M0 用 <span class="mono">pitch 24</span>，能不能打 via 完全由這個交集決定。</p>
+    </li>
+    <li>
+      <h3>虛擬邊（virtual edge）：跳過中間層的捷徑</h3>
+      <p>當兩層在 z 上不相鄰、但實體上想讓它們直接通，就用 virtual edge。<code>_build_graph</code> 提供五種產生方式：</p>
+      <ul>
+        <li><code>overlap</code> — 只連 (r,c) 完全重疊的節點。QFET 的 <span class="mono">VL1 (BPC1↔PC1)</span> 用這個。</li>
+        <li><code>colwise</code> — 同一個 column 上，下層每個 row 連上層每個 row。</li>
+        <li><code>sdcolwise</code> — 同上，但只限下層的 <b>奇數（S/D）</b> column。</li>
+        <li><code>overlapGate</code> — 只限指定的 gate columns（可再限 rows）。</li>
+        <li><code>boundary</code> — 只連每個 column 的頭尾兩個共同 row。CFET 的 <span class="mono">BPC↔M0</span> 用這個，正好對應上一步只留 boundary rows 的決定。</li>
+      </ul>
+      <p>虛擬邊在 viewer 裡可以打開來看：切到 QFET、把 <span class="mono">VL1 (virtual)</span> 那列點亮，會看到一排黃色柱子從 BPC1 頂端貫穿到 PC1。<b>那些柱子在真實製程裡不存在</b> — 沒有光罩、沒有幾何，它只是圖上的一條邊，走它要付 <code>virtual_edge_cost</code>（預設 5，比 metal 的 1 和 via 的 3 貴）。GDS 只有加 <code>--draw-virtual</code> 才會把它畫在 debug layer 700 上。</p>
+    </li>
+  </ol>
+
+  <div class="note">
+    <p><b>把 graph 建好之後才是約束。</b><code>layer_to_kind</code>（<span class="ref">tech.py 的 property</span>）把每一層標成 <span class="mono">PLACE</span> 或 <span class="mono">ROUTE</span>，<code>core/routing.py</code> 裡兩千多行的約束就靠這個分流：哪些層可以放電晶體、哪些層的邊要在 diffusion break 的 column 上被禁掉、哪些層算 M2 使用量上限。</p>
+  </div>
+</section>
+
+<section class="blk">
+  <p class="eyebrow">Solve → GDS</p>
+  <h2>GDS 是怎麼畫出來的</h2>
+  <p class="lede">solver 解完不會直接吐 GDS。中間隔了一個純文字的 <code>.res</code>，這讓 GDS writer 完全不必碰 CP-SAT。</p>
+
+  <h3>第一步：把解寫成 .res</h3>
+  <p><code>write_finfet_result</code> / <code>write_cfet_result</code> / <code>write_qfet_result</code>（各自的 <code>util.py</code>）把 solver 的變數值讀出來，做兩件事：把每顆電晶體的 <span class="mono">x / y / (z) / flip / S,D,G 的 column</span> 印成一張表；把所有 <span class="mono">edge_vars == 1</span> 的邊收集起來，用 <code>_merge_collinear_edges()</code> 把同層同 net 的共線邊串成一條長線段，再印成第二張表。</p>
+  <p>三個 tech 的表頭差異剛好是架構差異的縮影：</p>
+  <pre>FinFET  Name  X  Y      Flip  Width Height  SrcCol ...
+CFET    Name  X  Y      Flip  Width Height  <u>SrcRow</u> SrcCol ...
+QFET    Name  X  Y  <u>Z</u>  Flip  Width Height  SrcCol ...</pre>
+  <p>QFET 多的那個 <code>Z</code> 直接就是 placement tier 的名字（<span class="mono">PC1</span> 或 <span class="mono">BPC1</span>），從 <code>lgg.idx_to_layer[z_idx]</code> 查來的。我跑的這顆 INV_X1，兩顆電晶體都被放到 <span class="mono">PC1</span>（正面）— 反相器太小，solver 沒有理由動用背面 tier。</p>
+
+  <h3>第二步：.res → KLayout</h3>
+  <p>三個 writer 都是同一套骨架：<code>_parse_result()</code> 用正規表示式把兩張表讀回 NamedTuple，<code>draw()</code> 建立所有 layer index，然後依序畫 boundary → well/select → gate → fin → active/LISD → routing。</p>
+  <p>幾何全部靠幾個常數換算回 nm：</p>
+  <pre><b>SOLVER_RESCALE = 2.0</b>   <i>倍解析度座標 ÷ 2 = 實體 nm</i>
+<b>_ROUTE_X_OFFSET = -7</b>   <i>via / wire 錨在 landing via 的左下角</i>
+<b>_ROUTE_Y_OFFSET = +29</b>
+<b>_VIA_SIZE = 14</b>         <i>每個跨層落點都是 14×14 的接觸方塊</i></pre>
+  <p>一條同層線段的盒子（<span class="ref">gds_QFET_SH.py:_wire_box</span>）：走向那一軸從起點的 via 涵蓋到終點的 via，垂直那一軸用該層自己的 <code>width</code> 對齊 via 中心，再各往外加 <code>horizontal_enclosure</code> / <code>vertical_enclosure</code> — 這兩個值是從 layer JSON 讀的（H 層 3/0、V 層 0.5/5），不是寫死的。</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>writer</th><th>SCALE</th><th>dbu</th><th>1 writer 單位</th><th>layer number 來源</th></tr></thead>
+    <tbody>
+      <tr><th>gds_FinFET_SH.py</th><td class="mono">4</td><td class="mono">0.00025</td><td class="mono">= 1 nm</td><td>寫死 <code>self.layout.layer(15, 0)</code> 這種呼叫</td></tr>
+      <tr><th>gds_CFET_SH.py</th><td class="mono">10</td><td class="mono">0.0001</td><td class="mono">= 1 nm</td><td>同上，另加 <span class="mono">6/0 = BPC</span>、<span class="mono">7/1 = PC</span></td></tr>
+      <tr><th>gds_QFET_SH.py</th><td class="mono">4</td><td class="mono">0.00025</td><td class="mono">= 1 nm</td><td><b>讀 layer JSON 的 <code>gds_layer</code> / <code>gds_datatype</code></b></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>SCALE 和 dbu 的組合不同但乘出來一樣（<span class="mono">4×0.00025 = 10×0.0001 = 0.001µm</span>），所以三份 GDS 的絕對尺寸是一致的 — 我把三個檔案讀進來換算後 cell 邊界都落在同一個 nm 空間，上面的立體圖才能直接並排比較。</p>
+  <p>最大的結構差異是最後一欄：QFET writer 已經把 GDS layer number 外部化到 layer JSON 了，FinFET / CFET 還是在 <code>draw()</code> 裡一行一行寫死。要換 PDK 的話，QFET 只要改 JSON，另外兩個得改程式。</p>
+</section>
+
+<section class="blk">
+  <p class="eyebrow">Honest caveats</p>
+  <h2>這張立體圖哪裡是真的、哪裡是我補的</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th></th><th>來源</th></tr></thead>
+    <tbody>
+      <tr><th>多邊形的 x / y 邊界</th><td><b>完全真實</b> — 直接從三個 <code>INV_X1.gds</code> 用 KLayout API 抽出來，只做 dbu → nm 的換算。</td></tr>
+      <tr><th>層與層的先後順序</th><td><b>真實</b> — 依 layer JSON 的 <code>layer_number</code>（即 LayerStack 排序後的 metal 順序）以及 via 的 <code>lower_layer → upper_layer</code> 鏈。</td></tr>
+      <tr><th>每層的 z 起點與厚度</th><td><b>示意值，是我設的。</b>layer JSON 裡完全沒有厚度資訊 — 它只描述平面上的 direction / pitch / offset / width。整個 SMTCell 是 2D 的：solver 的「層」是圖的 z-index，GDS 是平面格式。所以厚度必須由外部補，我按一般 4-track 先進製程的相對比例給值，只保證<b>順序</b>與<b>誰跨越誰</b>正確。</td></tr>
+      <tr><th>QFET 背面元件層是空的</th><td><b>真實結果</b> — 這顆 INV_X1 兩顆電晶體都落在正面 <span class="mono">PC1</span>。<span class="mono">ACTIVE_BACK_*</span> / <span class="mono">BSDT1</span> / <span class="mono">BLISD1</span> 沒有幾何，所以列在側欄但是空的（灰字斜體）。背面的 fin grid 和 <span class="mono">BM0</span> 電源軌有畫，因為 writer 不管有沒有元件都會鋪。</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p>資料來源：本 repo 於 <span class="mono">engine/</span> 目錄實跑 <span class="mono">src.cellgen.run</span> 三次（preset FinFET_4T_SH / CFET_4T_SH / QFET_4T_SH，cell INV_X1），再各跑一次對應的 <span class="mono">src.cellgen.postprocess.gds_*_SH</span>，最後用 KLayout Python API 把 GDS 的 polygon 全部 dump 成 JSON 內嵌進本頁。</p>
+  <p>SMTCell 2.0 — UCSD VLSI Lab (Prof. Chung-Kuan Cheng)。QFET 在此 repo 中是 3D FinFET 的代稱。</p>
+</footer>
+
+<script id="stackdata" type="application/json">{"techs":{"FinFET":{"cell":"INV_X1","layers":[{"key":"1/0","name":"WELL","z0":-28,"z1":-4,"group":"substrate","color":"#64748b","note":"n-well / bulk marker","on":false,"polys":[[[0.0,72.0],[0.0,144.0],[90.0,144.0],[90.0,72.0]]],"texts":[]},{"key":"12/0","name":"NSELECT","z0":-6,"z1":-2,"group":"implant","color":"#a78bfa","note":"n-implant mask","on":false,"polys":[[[0.0,0.0],[0.0,72.0],[90.0,72.0],[90.0,0.0]]],"texts":[]},{"key":"13/0","name":"PSELECT","z0":-6,"z1":-2,"group":"implant","color":"#f472b6","note":"p-implant mask","on":false,"polys":[[[0.0,72.0],[0.0,144.0],[90.0,144.0],[90.0,72.0]]],"texts":[]},{"key":"2/0","name":"FIN","z0":0,"z1":42,"group":"device","color":"#22d3ee","note":"fin channel grid (5 fins, pitch 18 / width 6)","on":true,"polys":[[[0.0,21.0],[0.0,27.0],[90.0,27.0],[90.0,21.0]],[[0.0,45.0],[0.0,51.0],[90.0,51.0],[90.0,45.0]],[[0.0,69.0],[0.0,75.0],[90.0,75.0],[90.0,69.0]],[[0.0,93.0],[0.0,99.0],[90.0,99.0],[90.0,93.0]],[[0.0,117.0],[0.0,123.0],[90.0,123.0],[90.0,117.0]]],"texts":[]},{"key":"11/0","name":"ACTIVE","z0":0,"z1":46,"group":"device","color":"#10b981","note":"diffusion (OD): PMOS band on top, NMOS below","on":true,"polys":[[[15.5,79.0],[15.5,125.0],[74.5,125.0],[74.5,79.0]],[[15.5,19.0],[15.5,65.0],[74.5,65.0],[74.5,19.0]]],"texts":[]},{"key":"88/0","name":"SDT","z0":8,"z1":46,"group":"device","color":"#f59e0b","note":"source/drain trench (epi)","on":true,"polys":[[[14.5,20.0],[14.5,124.0],[30.5,124.0],[30.5,20.0]],[[59.5,78.0],[59.5,120.0],[75.5,120.0],[75.5,78.0]],[[59.5,24.0],[59.5,66.0],[75.5,66.0],[75.5,24.0]]],"texts":[]},{"key":"7/0","name":"PC / GATE","z0":0,"z1":62,"group":"device","color":"#ef4444","note":"poly gate bar at every CPP (45nm)","on":true,"polys":[[[-8.0,-5.0],[-8.0,149.0],[8.0,149.0],[8.0,-5.0]],[[37.0,-5.0],[37.0,149.0],[53.0,149.0],[53.0,-5.0]],[[82.0,-5.0],[82.0,149.0],[98.0,149.0],[98.0,-5.0]]],"texts":[]},{"key":"10/0","name":"GATE_CUT","z0":44,"z1":66,"group":"mask","color":"#94a3b8","note":"gate cut between P and N gate nets","on":false,"polys":[[[0.0,-18.5],[0.0,18.5],[90.0,18.5],[90.0,-18.5]],[[0.0,125.5],[0.0,162.5],[90.0,162.5],[90.0,125.5]],[[-8.0,-5.0],[-8.0,149.0],[8.0,149.0],[8.0,-5.0]],[[82.0,-5.0],[82.0,149.0],[98.0,149.0],[98.0,-5.0]]],"texts":[]},{"key":"17/0","name":"LISD","z0":46,"z1":74,"group":"mol","color":"#fbbf24","note":"local interconnect to source/drain","on":true,"polys":[[[14.5,20.0],[14.5,124.0],[30.5,124.0],[30.5,20.0]],[[59.5,78.0],[59.5,144.0],[75.5,144.0],[75.5,78.0]],[[59.5,0.0],[59.5,66.0],[75.5,66.0],[75.5,0.0]]],"texts":[]},{"key":"16/0","name":"LIG","z0":62,"z1":74,"group":"mol","color":"#fb923c","note":"local interconnect to gate","on":true,"polys":[[[0.0,-7.0],[0.0,7.0],[90.0,7.0],[90.0,-7.0]],[[0.0,137.0],[0.0,151.0],[90.0,151.0],[90.0,137.0]],[[38.0,29.0],[38.0,43.0],[52.0,43.0],[52.0,29.0]]],"texts":[]},{"key":"14/0","name":"CA","z0":74,"z1":90,"group":"via","color":"#e2e8f0","note":"contact via PC -> M0","on":true,"polys":[[[-7.0,-7.0],[-7.0,7.0],[7.0,7.0],[7.0,-7.0]],[[-7.0,137.0],[-7.0,151.0],[7.0,151.0],[7.0,137.0]],[[38.0,-7.0],[38.0,7.0],[52.0,7.0],[52.0,-7.0]],[[38.0,137.0],[38.0,151.0],[52.0,151.0],[52.0,137.0]],[[83.0,-7.0],[83.0,7.0],[97.0,7.0],[97.0,-7.0]],[[83.0,137.0],[83.0,151.0],[97.0,151.0],[97.0,137.0]],[[38.0,29.0],[38.0,43.0],[52.0,43.0],[52.0,29.0]],[[15.5,53.0],[15.5,67.0],[29.5,67.0],[29.5,53.0]]],"texts":[]},{"key":"15/0","name":"M0","z0":90,"z1":104,"group":"beol","color":"#3b82f6","note":"M0, horizontal, pitch 24 (also the M0BPR power rails)","on":true,"polys":[[[0.0,-18.0],[0.0,18.0],[90.0,18.0],[90.0,-18.0]],[[0.0,126.0],[0.0,162.0],[90.0,162.0],[90.0,126.0]],[[35.0,29.0],[35.0,43.0],[70.0,43.0],[70.0,29.0]],[[12.5,53.0],[12.5,67.0],[55.0,67.0],[55.0,53.0]]],"texts":[]},{"key":"18/0","name":"V0","z0":104,"z1":118,"group":"via","color":"#e2e8f0","note":"via M0 -> M1","on":true,"polys":[[[53.0,29.0],[53.0,43.0],[67.0,43.0],[67.0,29.0]],[[23.0,53.0],[23.0,67.0],[37.0,67.0],[37.0,53.0]]],"texts":[]},{"key":"19/0","name":"M1","z0":118,"z1":132,"group":"beol","color":"#8b5cf6","note":"M1, vertical, pitch 30","on":true,"polys":[[[22.5,24.0],[22.5,120.0],[37.5,120.0],[37.5,24.0]],[[52.5,24.0],[52.5,120.0],[67.5,120.0],[67.5,24.0]]],"texts":[]},{"key":"21/0","name":"V1","z0":132,"z1":146,"group":"via","color":"#e2e8f0","note":"via M1 -> M2","on":true,"polys":[],"texts":[]},{"key":"20/0","name":"M2","z0":146,"z1":160,"group":"beol","color":"#ec4899","note":"M2, horizontal, pitch 24","on":true,"polys":[],"texts":[]}]},"CFET":{"cell":"INV_X1","layers":[{"key":"1/0","name":"WELL","z0":-28,"z1":-4,"group":"substrate","color":"#64748b","note":"bulk / well marker","on":false,"polys":[[[0.0,72.0],[0.0,144.0],[90.0,144.0],[90.0,72.0]]],"texts":[]},{"key":"12/0","name":"NSELECT","z0":-6,"z1":-2,"group":"implant","color":"#a78bfa","note":"n-implant mask","on":false,"polys":[[[0.0,0.0],[0.0,72.0],[90.0,72.0],[90.0,0.0]]],"texts":[]},{"key":"2/0","name":"FIN","z0":0,"z1":42,"group":"bot","color":"#22d3ee","note":"bottom-tier fin channel","on":true,"polys":[[[0.0,21.0],[0.0,27.0],[90.0,27.0],[90.0,21.0]],[[0.0,45.0],[0.0,51.0],[90.0,51.0],[90.0,45.0]],[[0.0,69.0],[0.0,75.0],[90.0,75.0],[90.0,69.0]],[[0.0,93.0],[0.0,99.0],[90.0,99.0],[90.0,93.0]],[[0.0,117.0],[0.0,123.0],[90.0,123.0],[90.0,117.0]]],"texts":[]},{"key":"11/2","name":"N_ACTIVE","z0":0,"z1":46,"group":"bot","color":"#10b981","note":"BOTTOM tier diffusion (NMOS, on BPC)","on":true,"polys":[[[15.5,19.0],[15.5,125.0],[74.5,125.0],[74.5,19.0]]],"texts":[]},{"key":"88/2","name":"N_SDT","z0":8,"z1":46,"group":"bot","color":"#f59e0b","note":"bottom-tier source/drain trench","on":true,"polys":[[[14.5,24.0],[14.5,120.0],[30.5,120.0],[30.5,24.0]],[[59.5,20.0],[59.5,124.0],[75.5,124.0],[75.5,20.0]],[[59.5,24.0],[59.5,120.0],[75.5,120.0],[75.5,24.0]]],"texts":[]},{"key":"17/2","name":"N_LISD","z0":46,"z1":66,"group":"bot","color":"#fbbf24","note":"bottom-tier local interconnect (S/D). CFET routes on LISD/LIG","on":true,"polys":[[[14.5,0.0],[14.5,124.0],[30.5,124.0],[30.5,0.0]],[[59.5,20.0],[59.5,124.0],[75.5,124.0],[75.5,20.0]],[[59.5,20.0],[59.5,124.0],[75.5,124.0],[75.5,20.0]]],"texts":[]},{"key":"13/0","name":"PSELECT","z0":86,"z1":90,"group":"implant","color":"#f472b6","note":"p-implant mask (top tier)","on":false,"polys":[[[0.0,72.0],[0.0,144.0],[90.0,144.0],[90.0,72.0]]],"texts":[]},{"key":"11/1","name":"P_ACTIVE","z0":92,"z1":138,"group":"top","color":"#34d399","note":"TOP tier diffusion (PMOS, on PC) - same X/Y footprint as N_ACTIVE","on":true,"polys":[[[15.5,19.0],[15.5,125.0],[74.5,125.0],[74.5,19.0]]],"texts":[]},{"key":"88/1","name":"P_SDT","z0":100,"z1":138,"group":"top","color":"#fbbf24","note":"top-tier source/drain trench","on":true,"polys":[[[14.5,24.0],[14.5,120.0],[30.5,120.0],[30.5,24.0]],[[59.5,20.0],[59.5,124.0],[75.5,124.0],[75.5,20.0]]],"texts":[]},{"key":"17/1","name":"P_LISD","z0":138,"z1":158,"group":"top","color":"#fcd34d","note":"top-tier local interconnect (S/D)","on":true,"polys":[[[14.5,20.0],[14.5,144.0],[30.5,144.0],[30.5,20.0]],[[59.5,20.0],[59.5,124.0],[75.5,124.0],[75.5,20.0]]],"texts":[]},{"key":"7/0","name":"GATE (PC+BPC)","z0":0,"z1":150,"group":"device","color":"#ef4444","note":"ONE gate stack runs through both tiers - the CFET signature","on":true,"polys":[[[-8.0,-5.0],[-8.0,149.0],[8.0,149.0],[8.0,-5.0]],[[37.0,-5.0],[37.0,149.0],[53.0,149.0],[53.0,-5.0]],[[82.0,-5.0],[82.0,149.0],[98.0,149.0],[98.0,-5.0]]],"texts":[]},{"key":"10/0","name":"GATE_CUT","z0":130,"z1":154,"group":"mask","color":"#94a3b8","note":"gate cut","on":false,"polys":[[[0.0,-18.5],[0.0,18.5],[90.0,18.5],[90.0,-18.5]],[[0.0,125.5],[0.0,162.5],[90.0,162.5],[90.0,125.5]],[[-8.0,-5.0],[-8.0,149.0],[8.0,149.0],[8.0,-5.0]],[[82.0,-5.0],[82.0,149.0],[98.0,149.0],[98.0,-5.0]]],"texts":[]},{"key":"16/0","name":"LIG","z0":150,"z1":174,"group":"mol","color":"#fb923c","note":"local interconnect to gate","on":true,"polys":[[[0.0,-7.0],[0.0,7.0],[90.0,7.0],[90.0,-7.0]],[[0.0,137.0],[0.0,151.0],[90.0,151.0],[90.0,137.0]],[[60.5,29.0],[60.5,43.0],[74.5,43.0],[74.5,29.0]]],"texts":[]},{"key":"14/0","name":"CA","z0":158,"z1":174,"group":"via","color":"#e2e8f0","note":"contact via PC/BPC -> M0","on":true,"polys":[[[-7.0,-7.0],[-7.0,7.0],[7.0,7.0],[7.0,-7.0]],[[-7.0,137.0],[-7.0,151.0],[7.0,151.0],[7.0,137.0]],[[38.0,-7.0],[38.0,7.0],[52.0,7.0],[52.0,-7.0]],[[38.0,137.0],[38.0,151.0],[52.0,151.0],[52.0,137.0]],[[83.0,-7.0],[83.0,7.0],[97.0,7.0],[97.0,-7.0]],[[83.0,137.0],[83.0,151.0],[97.0,151.0],[97.0,137.0]],[[60.5,29.0],[60.5,43.0],[74.5,43.0],[74.5,29.0]],[[38.0,77.0],[38.0,91.0],[52.0,91.0],[52.0,77.0]]],"texts":[]},{"key":"15/0","name":"M0","z0":174,"z1":188,"group":"beol","color":"#3b82f6","note":"M0, horizontal, pitch 24","on":true,"polys":[[[0.0,-18.0],[0.0,18.0],[90.0,18.0],[90.0,-18.0]],[[0.0,126.0],[0.0,162.0],[90.0,162.0],[90.0,126.0]],[[35.0,29.0],[35.0,43.0],[77.5,43.0],[77.5,29.0]],[[20.0,77.0],[20.0,91.0],[55.0,91.0],[55.0,77.0]]],"texts":[]},{"key":"18/0","name":"V0","z0":188,"z1":202,"group":"via","color":"#e2e8f0","note":"via M0 -> M1","on":true,"polys":[[[53.0,29.0],[53.0,43.0],[67.0,43.0],[67.0,29.0]],[[23.0,77.0],[23.0,91.0],[37.0,91.0],[37.0,77.0]]],"texts":[]},{"key":"19/0","name":"M1","z0":202,"z1":216,"group":"beol","color":"#8b5cf6","note":"M1, vertical, pitch 30","on":true,"polys":[[[22.5,24.0],[22.5,120.0],[37.5,120.0],[37.5,24.0]],[[52.5,24.0],[52.5,120.0],[67.5,120.0],[67.5,24.0]]],"texts":[]},{"key":"20/0","name":"M2","z0":216,"z1":230,"group":"beol","color":"#ec4899","note":"M2, horizontal, pitch 24","on":true,"polys":[],"texts":[]}]},"QFET":{"cell":"INV_X1","layers":[{"key":"519/0","name":"BM1","z0":-250,"z1":-236,"group":"backbeol","color":"#a855f7","note":"backside M1, vertical, pitch 42 offset 21","on":true,"polys":[],"texts":[]},{"key":"518/0","name":"BV0","z0":-236,"z1":-222,"group":"via","color":"#e2e8f0","note":"backside via BM1 -> BM0","on":true,"polys":[],"texts":[]},{"key":"515/0","name":"BM0","z0":-222,"z1":-208,"group":"backbeol","color":"#60a5fa","note":"backside M0, horizontal - carries the backside power rails","on":true,"polys":[[[0.0,-12.0],[0.0,12.0],[84.0,12.0],[84.0,-12.0]],[[0.0,132.0],[0.0,156.0],[84.0,156.0],[84.0,132.0]]],"texts":[{"s":"VSS","x":42.0,"y":0.0},{"s":"VDD","x":42.0,"y":144.0}]},{"key":"514/0","name":"BCA1","z0":-208,"z1":-192,"group":"via","color":"#e2e8f0","note":"backside contact BM0 -> BPC1","on":true,"polys":[],"texts":[]},{"key":"51/0","name":"WELL_BACK","z0":-200,"z1":-176,"group":"substrate","color":"#64748b","note":"backside well marker","on":false,"polys":[[[0.0,72.0],[0.0,144.0],[84.0,144.0],[84.0,72.0]]],"texts":[]},{"key":"512/0","name":"NSELECT_BACK","z0":-180,"z1":-176,"group":"implant","color":"#a78bfa","note":"backside n-implant","on":false,"polys":[[[0.0,0.0],[0.0,72.0],[84.0,72.0],[84.0,0.0]]],"texts":[]},{"key":"513/0","name":"PSELECT_BACK","z0":-180,"z1":-176,"group":"implant","color":"#f472b6","note":"backside p-implant","on":false,"polys":[[[0.0,72.0],[0.0,144.0],[84.0,144.0],[84.0,72.0]]],"texts":[]},{"key":"502/0","name":"FIN_BACK","z0":-172,"z1":-130,"group":"back","color":"#0891b2","note":"backside-tier fin grid","on":true,"polys":[[[0.0,21.0],[0.0,27.0],[84.0,27.0],[84.0,21.0]],[[0.0,45.0],[0.0,51.0],[84.0,51.0],[84.0,45.0]],[[0.0,69.0],[0.0,75.0],[84.0,75.0],[84.0,69.0]],[[0.0,93.0],[0.0,99.0],[84.0,99.0],[84.0,93.0]],[[0.0,117.0],[0.0,123.0],[84.0,123.0],[84.0,117.0]]],"texts":[]},{"key":"511/1","name":"ACTIVE_BACK_P","z0":-172,"z1":-126,"group":"back","color":"#059669","note":"backside PMOS diffusion (empty in this cell)","on":true,"polys":[],"texts":[]},{"key":"511/2","name":"ACTIVE_BACK_N","z0":-172,"z1":-126,"group":"back","color":"#10b981","note":"backside NMOS diffusion (empty in this cell)","on":true,"polys":[],"texts":[]},{"key":"588/0","name":"BSDT1","z0":-164,"z1":-126,"group":"back","color":"#d97706","note":"backside source/drain trench","on":true,"polys":[],"texts":[]},{"key":"57/0","name":"BPC1","z0":-172,"z1":-112,"group":"back","color":"#dc2626","note":"BACKSIDE gate poly - the 2nd placement tier","on":true,"polys":[[[-8.0,5.0],[-8.0,139.0],[8.0,139.0],[8.0,5.0]],[[34.0,5.0],[34.0,139.0],[50.0,139.0],[50.0,5.0]],[[76.0,5.0],[76.0,139.0],[92.0,139.0],[92.0,5.0]]],"texts":[]},{"key":"510/0","name":"GATE_CUT_BACK","z0":-134,"z1":-112,"group":"mask","color":"#94a3b8","note":"backside gate cut","on":false,"polys":[],"texts":[]},{"key":"517/0","name":"BLISD1","z0":-126,"z1":-106,"group":"back","color":"#f59e0b","note":"backside local interconnect","on":true,"polys":[],"texts":[]},{"key":"5000/0","name":"MIV1","z0":-106,"z1":-90,"group":"miv","color":"#f0abfc","note":"monolithic inter-tier via BPC1 -> H0","on":true,"polys":[],"texts":[]},{"key":"600/0","name":"H0","z0":-90,"z1":-76,"group":"mid","color":"#2dd4bf","note":"inter-tier routing layer, horizontal, pitch 24","on":true,"polys":[],"texts":[]},{"key":"5001/0","name":"MIV2","z0":-76,"z1":-62,"group":"miv","color":"#f0abfc","note":"MIV H0 -> H1","on":true,"polys":[],"texts":[]},{"key":"601/0","name":"H1","z0":-62,"z1":-48,"group":"mid","color":"#14b8a6","note":"inter-tier routing layer, vertical, pitch 42 offset 21","on":true,"polys":[],"texts":[]},{"key":"5002/0","name":"MIV3","z0":-48,"z1":-4,"group":"miv","color":"#f0abfc","note":"MIV H1 -> PC1 (climbs into the front tier)","on":true,"polys":[],"texts":[]},{"key":"700/0","name":"VL1 (virtual)","z0":-112,"z1":0,"group":"virtual","color":"#facc15","note":"GRAPH-ONLY jump BPC1 <-> PC1. No mask, no geometry - it only exists as an edge in the LayeredGridGraph.","on":false,"polys":[[[-7.0,-7.0],[-7.0,7.0],[7.0,7.0],[7.0,-7.0]],[[-7.0,17.0],[-7.0,31.0],[7.0,31.0],[7.0,17.0]],[[-7.0,41.0],[-7.0,55.0],[7.0,55.0],[7.0,41.0]],[[-7.0,65.0],[-7.0,79.0],[7.0,79.0],[7.0,65.0]],[[-7.0,89.0],[-7.0,103.0],[7.0,103.0],[7.0,89.0]],[[-7.0,113.0],[-7.0,127.0],[7.0,127.0],[7.0,113.0]],[[-7.0,137.0],[-7.0,151.0],[7.0,151.0],[7.0,137.0]],[[35.0,-7.0],[35.0,7.0],[49.0,7.0],[49.0,-7.0]],[[35.0,17.0],[35.0,31.0],[49.0,31.0],[49.0,17.0]],[[35.0,41.0],[35.0,55.0],[49.0,55.0],[49.0,41.0]],[[35.0,65.0],[35.0,79.0],[49.0,79.0],[49.0,65.0]],[[35.0,89.0],[35.0,103.0],[49.0,103.0],[49.0,89.0]],[[35.0,113.0],[35.0,127.0],[49.0,127.0],[49.0,113.0]],[[35.0,137.0],[35.0,151.0],[49.0,151.0],[49.0,137.0]],[[77.0,-7.0],[77.0,7.0],[91.0,7.0],[91.0,-7.0]],[[77.0,17.0],[77.0,31.0],[91.0,31.0],[91.0,17.0]],[[77.0,41.0],[77.0,55.0],[91.0,55.0],[91.0,41.0]],[[77.0,65.0],[77.0,79.0],[91.0,79.0],[91.0,65.0]],[[77.0,89.0],[77.0,103.0],[91.0,103.0],[91.0,89.0]],[[77.0,113.0],[77.0,127.0],[91.0,127.0],[91.0,113.0]],[[77.0,137.0],[77.0,151.0],[91.0,151.0],[91.0,137.0]]],"texts":[]},{"key":"1/0","name":"WELL_FRONT","z0":-28,"z1":-4,"group":"substrate","color":"#64748b","note":"frontside well marker","on":false,"polys":[[[0.0,72.0],[0.0,144.0],[84.0,144.0],[84.0,72.0]]],"texts":[]},{"key":"12/0","name":"NSELECT_FRONT","z0":-6,"z1":-2,"group":"implant","color":"#a78bfa","note":"frontside n-implant","on":false,"polys":[[[0.0,0.0],[0.0,72.0],[84.0,72.0],[84.0,0.0]]],"texts":[]},{"key":"13/0","name":"PSELECT_FRONT","z0":-6,"z1":-2,"group":"implant","color":"#f472b6","note":"frontside p-implant","on":false,"polys":[[[0.0,72.0],[0.0,144.0],[84.0,144.0],[84.0,72.0]]],"texts":[]},{"key":"2/0","name":"FIN_FRONT","z0":0,"z1":42,"group":"device","color":"#22d3ee","note":"frontside fin grid","on":true,"polys":[[[0.0,21.0],[0.0,27.0],[84.0,27.0],[84.0,21.0]],[[0.0,45.0],[0.0,51.0],[84.0,51.0],[84.0,45.0]],[[0.0,69.0],[0.0,75.0],[84.0,75.0],[84.0,69.0]],[[0.0,93.0],[0.0,99.0],[84.0,99.0],[84.0,93.0]],[[0.0,117.0],[0.0,123.0],[84.0,123.0],[84.0,117.0]]],"texts":[]},{"key":"11/1","name":"ACTIVE_FRONT_P","z0":0,"z1":46,"group":"device","color":"#34d399","note":"frontside PMOS diffusion","on":true,"polys":[[[14.0,79.0],[14.0,125.0],[70.0,125.0],[70.0,79.0]]],"texts":[]},{"key":"11/2","name":"ACTIVE_FRONT_N","z0":0,"z1":46,"group":"device","color":"#10b981","note":"frontside NMOS diffusion","on":true,"polys":[[[14.0,19.0],[14.0,65.0],[70.0,65.0],[70.0,19.0]]],"texts":[]},{"key":"88/0","name":"SDT1","z0":8,"z1":46,"group":"device","color":"#f59e0b","note":"frontside source/drain trench","on":true,"polys":[[[13.0,20.0],[13.0,124.0],[29.0,124.0],[29.0,20.0]],[[55.0,78.0],[55.0,120.0],[71.0,120.0],[71.0,78.0]],[[55.0,24.0],[55.0,66.0],[71.0,66.0],[71.0,24.0]]],"texts":[]},{"key":"7/0","name":"PC1","z0":0,"z1":62,"group":"device","color":"#ef4444","note":"FRONTSIDE gate poly - the 1st placement tier","on":true,"polys":[[[-8.0,5.0],[-8.0,139.0],[8.0,139.0],[8.0,5.0]],[[34.0,5.0],[34.0,139.0],[50.0,139.0],[50.0,5.0]],[[76.0,5.0],[76.0,139.0],[92.0,139.0],[92.0,5.0]]],"texts":[]},{"key":"10/0","name":"GATE_CUT_FRONT","z0":44,"z1":66,"group":"mask","color":"#94a3b8","note":"frontside gate cut","on":false,"polys":[],"texts":[]},{"key":"17/0","name":"LISD1","z0":46,"z1":74,"group":"mol","color":"#fbbf24","note":"frontside local interconnect","on":true,"polys":[[[13.0,20.0],[13.0,124.0],[29.0,124.0],[29.0,20.0]],[[55.0,78.0],[55.0,144.0],[71.0,144.0],[71.0,78.0]],[[55.0,0.0],[55.0,66.0],[71.0,66.0],[71.0,0.0]]],"texts":[]},{"key":"14/0","name":"CA1","z0":74,"z1":90,"group":"via","color":"#e2e8f0","note":"contact PC1 -> M0","on":true,"polys":[[[35.0,29.0],[35.0,43.0],[49.0,43.0],[49.0,29.0]],[[14.0,77.0],[14.0,91.0],[28.0,91.0],[28.0,77.0]]],"texts":[]},{"key":"15/0","name":"M0","z0":90,"z1":104,"group":"beol","color":"#3b82f6","note":"M0, horizontal, pitch 24","on":true,"polys":[[[0.0,-12.0],[0.0,12.0],[84.0,12.0],[84.0,-12.0]],[[0.0,132.0],[0.0,156.0],[84.0,156.0],[84.0,132.0]],[[32.0,29.0],[32.0,43.0],[73.0,43.0],[73.0,29.0]]],"texts":[{"s":"VSS","x":42.0,"y":0.0},{"s":"VDD","x":42.0,"y":144.0},{"s":"I","x":52.5,"y":36.0}]},{"key":"18/0","name":"V0","z0":104,"z1":118,"group":"via","color":"#e2e8f0","note":"via M0 -> M1","on":true,"polys":[[[56.0,29.0],[56.0,43.0],[70.0,43.0],[70.0,29.0]],[[56.0,53.0],[56.0,67.0],[70.0,67.0],[70.0,53.0]]],"texts":[]},{"key":"19/0","name":"M1","z0":118,"z1":132,"group":"beol","color":"#8b5cf6","note":"M1, vertical, pitch 42 offset 21","on":true,"polys":[[[55.5,24.0],[55.5,72.0],[70.5,72.0],[70.5,24.0]]],"texts":[]}]}},"meta":{"FinFET":{"obj":"obj = 1021.0","specs":[["架構","單層平面 (1 tier)"],["Placement layer","PC"],["Pin access","M0"],["Cell 尺寸","90 × 144 nm"],["CPP / M1P / OF","45 / 30 / 0"],["LGG z 順序","PC · M0 · M1 · M2"],["虛擬邊","無"]]},"CFET":{"obj":"obj = 1034.0","specs":[["架構","垂直堆疊 (2 tier, P_on_N)"],["Placement layer","PC (上) / BPC (下)"],["Pin access","BPC, M0"],["Cell 尺寸","90 × 144 nm"],["CPP / M1P / OF","45 / 30 / 0"],["LGG z 順序","BPC · PC · M0 · M1 · M2"],["虛擬邊","BPC↔M0 (boundary)"]]},"QFET":{"obj":"obj = 999.0","specs":[["架構","正面 + 背面 (2 tier)"],["Placement layer","PC1 (正面) / BPC1 (背面)"],["Pin access","BM0, M0"],["Cell 尺寸","84 × 144 nm"],["CPP / M1P / OF","42 / 42 / 21"],["LGG z 順序","BM1 · BM0 · BPC1 · H0 · H1 · PC1 · M0 · M1"],["虛擬邊","VL1: BPC1↔PC1 (overlap)"]]}},"alpha":{"FinFET":{"7/0":0.42,"11/0":0.86,"10/0":0.5},"CFET":{"7/0":0.3,"11/1":0.88,"11/2":0.88,"10/0":0.5},"QFET":{"7/0":0.42,"57/0":0.42,"11/1":0.88,"11/2":0.88,"10/0":0.5,"510/0":0.5,"700/0":0.45}}}</script>
+<script>
+(function(){
+"use strict";
+const PAYLOAD = JSON.parse(document.getElementById("stackdata").textContent);
+const D = PAYLOAD.techs;      /* tech -> {layers:[...], ...} */
+const META = PAYLOAD.meta;    /* tech -> {obj, specs:[[k,v],...]} — built in layers.py */
+const ALPHA = PAYLOAD.alpha;  /* tech -> {gds_key: opacity} — enveloping layers */
+
+const GROUP_ZH = {
+  substrate:"基板", implant:"佈植", device:"元件層", bot:"下層元件", top:"上層元件",
+  back:"背面元件", backbeol:"背面金屬", mid:"層間繞線", miv:"MIV", mol:"MOL",
+  via:"Via", beol:"正面金屬", mask:"遮罩", virtual:"虛擬邊",
+};
+
+let tech = "CFET";
+let explode = 0.22;
+let groupFilter = null;
+let hoverKey = null;
+const onState = {};   // tech -> {layerKey: bool}
+
+/* ------------------------------------------------------------------ three */
+const canvas = document.getElementById("gl");
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:false});
+renderer.setClearColor(0x060a0e, 1);
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x060a0e, 900, 2200);
+const camera = new THREE.PerspectiveCamera(38, 1, 1, 4000);
+
+scene.add(new THREE.HemisphereLight(0x9fc6ff, 0x0b1016, 0.95));
+const key = new THREE.DirectionalLight(0xffffff, 0.72); key.position.set(220, 420, 300); scene.add(key);
+const fill = new THREE.DirectionalLight(0xffc9a8, 0.28); fill.position.set(-300, 120, -220); scene.add(fill);
+
+const root = new THREE.Group(); scene.add(root);
+
+/* simple orbit state */
+const orb = {az: -0.72, pol: 1.14, dist: 620, tx:0, ty:0, tz:0, spin:true};
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+if (reduceMotion) orb.spin = false;
+
+function applyCamera(){
+  const sp = Math.max(0.12, Math.min(Math.PI - 0.12, orb.pol));
+  camera.position.set(
+    orb.tx + orb.dist * Math.sin(sp) * Math.sin(orb.az),
+    orb.ty + orb.dist * Math.cos(sp),
+    orb.tz + orb.dist * Math.sin(sp) * Math.cos(orb.az)
+  );
+  camera.lookAt(orb.tx, orb.ty, orb.tz);
+}
+
+/* ------------------------------------------------------------- scene build */
+const meshes = [];
+
+function bbox(poly){
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for (const p of poly){
+    if(p[0]<x0)x0=p[0]; if(p[0]>x1)x1=p[0];
+    if(p[1]<y0)y0=p[1]; if(p[1]>y1)y1=p[1];
+  }
+  return [x0,y0,x1,y1];
+}
+
+function darken(hex, f){
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.round(((n>>16)&255)*f), g = Math.round(((n>>8)&255)*f), b = Math.round((n&255)*f);
+  return (r<<16)|(g<<8)|b;
+}
+
+function build(){
+  for (const m of meshes){
+    root.remove(m);
+    m.geometry.dispose();
+    if (m.material.dispose) m.material.dispose();
+  }
+  meshes.length = 0;
+
+  const T = D[tech];
+  const st = onState[tech];
+  let cx = 0, cy = 0, n = 0, ymin = Infinity, ymax = -Infinity, xr = 0, zr = 0;
+
+  for (const L of T.layers){
+    if (!st[L.key] || !L.polys.length) continue;
+    if (groupFilter && L.group !== groupFilter) continue;
+    const thick = Math.max(2, L.z1 - L.z0);
+    const col = parseInt(L.color.slice(1), 16);
+    const alpha = (ALPHA[tech] && ALPHA[tech][L.key]) || 1;
+    const mat = new THREE.MeshLambertMaterial({
+      color: col, transparent: alpha < 1, opacity: alpha, depthWrite: alpha >= 1,
+    });
+    const emat = new THREE.LineBasicMaterial({color: darken(L.color, 0.45), transparent:true, opacity:0.75});
+    for (const poly of L.polys){
+      const [x0,y0,x1,y1] = bbox(poly);
+      const w = Math.max(0.6, x1-x0), h = Math.max(0.6, y1-y0);
+      const geo = new THREE.BoxGeometry(w, thick, h);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.renderOrder = alpha < 1 ? 2 : 0;
+      mesh.userData.baseAlpha = alpha;
+      mesh.userData.baseY = (L.z0 + L.z1) / 2;
+      mesh.userData.layer = L;
+      mesh.position.set((x0+x1)/2, mesh.userData.baseY, -(y0+y1)/2);
+      root.add(mesh); meshes.push(mesh);
+
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), emat);
+      edges.userData.baseY = mesh.userData.baseY;
+      edges.userData.follow = mesh;
+      edges.position.copy(mesh.position);
+      root.add(edges); meshes.push(edges);
+
+      cx += (x0+x1)/2; cy += -(y0+y1)/2; n++;
+      xr = Math.max(xr, x1); zr = Math.max(zr, y1);
+      ymin = Math.min(ymin, L.z0); ymax = Math.max(ymax, L.z1);
+    }
+  }
+
+  applyExplode();
+  fitView();
+  applyCamera();
+}
+
+/* Frame whatever is currently visible: real world bbox of the exploded meshes,
+   then back the camera off far enough that its bounding sphere fits the FOV. */
+let userZoom = false;
+function fitView(){
+  const box = new THREE.Box3();
+  let any = false;
+  for (const m of meshes){
+    if (m.type !== "Mesh") continue;
+    m.updateMatrixWorld();
+    box.expandByObject(m); any = true;
+  }
+  if (!any){ orb.tx = 45; orb.ty = 60; orb.tz = -72; orb.dist = 420; return; }
+  const c = box.getCenter(new THREE.Vector3());
+  const r = box.getSize(new THREE.Vector3()).length() / 2;
+  orb.tx = c.x; orb.ty = c.y; orb.tz = c.z;
+  if (!userZoom){
+    const vfov = camera.fov * Math.PI / 180;
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
+    orb.dist = r / Math.sin(Math.min(vfov, hfov) / 2) * 1.08;
+  }
+}
+
+function applyExplode(){
+  for (const m of meshes){
+    m.position.y = m.userData.baseY * (1 + explode * 2.6);
+  }
+}
+
+/* --------------------------------------------------------------- highlight */
+function applyHighlight(){
+  for (const m of meshes){
+    if (!m.material || !m.userData.layer) continue;
+    const isEdge = m.type === "LineSegments";
+    if (isEdge) continue;
+    const base = m.userData.baseAlpha != null ? m.userData.baseAlpha : 1;
+    const hit = !hoverKey || m.userData.layer.key === hoverKey;
+    m.material.opacity = hit ? base : 0.12;
+    m.material.transparent = !hit || base < 1;
+    m.material.depthWrite = hit && base >= 1;
+    m.material.needsUpdate = true;
+  }
+}
+/* edges carry the same layer for hover, set after build */
+function tagEdges(){
+  for (const m of meshes){
+    if (m.type === "LineSegments" && m.userData.follow) m.userData.layer = m.userData.follow.userData.layer;
+  }
+}
+
+/* -------------------------------------------------------------------- rail */
+const railEl = document.getElementById("rail");
+const chipsEl = document.getElementById("chips");
+const specsEl = document.getElementById("specs");
+
+function renderSpecs(){
+  specsEl.innerHTML = "";
+  for (const [k,v] of META[tech].specs){
+    const d = document.createElement("div"); d.className = "spec";
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd"); dd.textContent = v;
+    d.append(dt, dd); specsEl.append(d);
+  }
+  document.getElementById("chip-obj").textContent = tech + " " + META[tech].obj;
+}
+
+function renderChips(){
+  const T = D[tech];
+  const seen = [];
+  for (const L of T.layers){ if (!seen.includes(L.group)) seen.push(L.group); }
+  chipsEl.innerHTML = "";
+  const mk = (label, g) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = label;
+    b.setAttribute("aria-pressed", String(groupFilter === g));
+    b.addEventListener("click", () => {
+      groupFilter = (groupFilter === g) ? null : g;
+      renderChips(); renderRail(); build(); tagEdges(); applyHighlight();
+    });
+    return b;
+  };
+  const all = mk("全部", null);
+  all.setAttribute("aria-pressed", String(groupFilter === null));
+  chipsEl.append(all);
+  for (const g of seen) chipsEl.append(mk(GROUP_ZH[g] || g, g));
+}
+
+function renderRail(){
+  const T = D[tech], st = onState[tech];
+  const rows = T.layers.slice().sort((a,b) => (b.z1 - a.z1) || (b.z0 - a.z0));
+  railEl.innerHTML = "";
+  for (const L of rows){
+    if (groupFilter && L.group !== groupFilter) continue;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "lrow";
+    b.dataset.on = st[L.key] ? "1" : "0";
+    b.dataset.empty = L.polys.length ? "0" : "1";
+    b.style.borderLeftColor = st[L.key] ? L.color : "transparent";
+
+    const sw = document.createElement("span");
+    sw.className = "sw"; sw.style.background = L.color;
+
+    const mid = document.createElement("span");
+    const nm = document.createElement("span"); nm.className = "lname"; nm.textContent = L.name;
+    const mt = document.createElement("span"); mt.className = "lmeta";
+    mt.textContent = "GDS " + L.key + " · " + (L.polys.length ? L.polys.length + " poly" : "無幾何") + " · " + (GROUP_ZH[L.group] || L.group);
+    mid.append(nm, document.createElement("br"), mt);
+
+    const z = document.createElement("span");
+    z.className = "lz"; z.textContent = L.z0 + "→" + L.z1;
+
+    b.append(sw, mid, z);
+    b.title = L.note;
+    b.addEventListener("click", () => {
+      st[L.key] = !st[L.key];
+      renderRail(); build(); tagEdges(); applyHighlight();
+    });
+    b.addEventListener("mouseenter", () => { hoverKey = L.key; applyHighlight(); showTipFor(L, null); });
+    b.addEventListener("mouseleave", () => { hoverKey = null; applyHighlight(); hideTip(); });
+    b.addEventListener("focus", () => { hoverKey = L.key; applyHighlight(); });
+    b.addEventListener("blur", () => { hoverKey = null; applyHighlight(); });
+    railEl.append(b);
+  }
+}
+
+/* -------------------------------------------------------------------- tips */
+const tip = document.getElementById("tip");
+const stage = document.querySelector(".stage");
+function showTipFor(L, ev){
+  tip.innerHTML = "";
+  const a = document.createElement("div"); a.className = "t-n"; a.textContent = L.name;
+  const b = document.createElement("div"); b.className = "t-m";
+  b.textContent = "GDS " + L.key + "  ·  z " + L.z0 + " → " + L.z1 + " nm  ·  " + L.polys.length + " polygon";
+  const c = document.createElement("div"); c.className = "t-d"; c.textContent = L.note;
+  tip.append(a, b, c);
+  tip.style.opacity = "1";
+  if (ev){
+    const r = stage.getBoundingClientRect();
+    let x = ev.clientX - r.left + 16, y = ev.clientY - r.top + 16;
+    if (x + 300 > r.width) x = r.width - 305;
+    if (y + 140 > r.height) y = r.height - 145;
+    tip.style.left = x + "px"; tip.style.top = y + "px";
+  } else {
+    tip.style.left = "16px"; tip.style.top = "76px";
+  }
+}
+function hideTip(){ tip.style.opacity = "0"; }
+
+/* ------------------------------------------------------------- interaction */
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let dragging = null, lastX = 0, lastY = 0, userTouched = false;
+
+canvas.addEventListener("pointerdown", e => {
+  dragging = (e.button === 2 || e.shiftKey) ? "pan" : "orbit";
+  lastX = e.clientX; lastY = e.clientY;
+  userTouched = true; orb.spin = false;
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointerup", e => {
+  dragging = null;
+  if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+});
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+canvas.addEventListener("pointermove", e => {
+  if (dragging === "orbit"){
+    orb.az -= (e.clientX - lastX) * 0.007;
+    orb.pol -= (e.clientY - lastY) * 0.007;
+    lastX = e.clientX; lastY = e.clientY; applyCamera();
+  } else if (dragging === "pan"){
+    const s = orb.dist * 0.0016;
+    orb.tx -= Math.cos(orb.az) * (e.clientX - lastX) * s;
+    orb.tz += Math.sin(orb.az) * (e.clientX - lastX) * s;
+    orb.ty += (e.clientY - lastY) * s;
+    lastX = e.clientX; lastY = e.clientY; applyCamera();
+  } else {
+    const r = canvas.getBoundingClientRect();
+    ndc.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+    ndc.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+    ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects(meshes.filter(m => m.type === "Mesh"), false);
+    if (hits.length){
+      const L = hits[0].object.userData.layer;
+      if (L){ hoverKey = L.key; applyHighlight(); showTipFor(L, e); }
+    } else if (hoverKey){
+      hoverKey = null; applyHighlight(); hideTip();
+    }
+  }
+});
+canvas.addEventListener("pointerleave", () => { hoverKey = null; applyHighlight(); hideTip(); });
+canvas.addEventListener("wheel", e => {
+  e.preventDefault(); userTouched = true; userZoom = true; orb.spin = false;
+  orb.dist = Math.max(90, Math.min(2600, orb.dist * (1 + Math.sign(e.deltaY) * 0.11)));
+  applyCamera();
+}, {passive:false});
+
+document.getElementById("ex").addEventListener("input", e => {
+  explode = e.target.value / 100;
+  document.getElementById("exv").textContent = explode.toFixed(2);
+  applyExplode(); fitView(); applyCamera();
+});
+document.getElementById("btn-reset").addEventListener("click", () => {
+  orb.az = -0.72; orb.pol = 1.14; userZoom = false; userTouched = true;
+  build(); tagEdges(); applyHighlight();
+});
+document.getElementById("btn-all").addEventListener("click", () => {
+  const st = onState[tech];
+  const anyOff = D[tech].layers.some(L => L.polys.length && !st[L.key]);
+  for (const L of D[tech].layers) st[L.key] = anyOff ? !!L.polys.length : false;
+  renderRail(); build(); tagEdges(); applyHighlight();
+});
+for (const btn of document.querySelectorAll(".seg button")){
+  btn.addEventListener("click", () => {
+    tech = btn.dataset.tech;
+    for (const b of document.querySelectorAll(".seg button"))
+      b.setAttribute("aria-pressed", String(b === btn));
+    groupFilter = null; hoverKey = null; hideTip();
+    renderSpecs(); renderChips(); renderRail(); build(); tagEdges(); applyHighlight();
+  });
+}
+
+/* -------------------------------------------------------------------- boot */
+for (const t of Object.keys(D)){
+  onState[t] = {};
+  for (const L of D[t].layers) onState[t][L.key] = L.on && L.polys.length > 0;
+}
+function resize(){
+  const r = stage.getBoundingClientRect();
+  const w = Math.max(320, r.width), h = Math.max(360, r.height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  if (meshes.length){ fitView(); applyCamera(); }
+}
+window.addEventListener("resize", resize);
+
+renderSpecs(); renderChips(); renderRail();
+resize(); build(); tagEdges(); applyHighlight();
+
+let t0 = performance.now();
+(function loop(now){
+  requestAnimationFrame(loop);
+  if (orb.spin && !userTouched){
+    orb.az += (now - t0) * 0.00007;
+    applyCamera();
+  }
+  t0 = now;
+  renderer.render(scene, camera);
+})(t0);
+
+/* ------------------------------------------- the half-pitch grid diagram */
+const fig = document.getElementById("fig-grid");
+fig.innerHTML =
+'<svg viewBox="0 0 820 220" role="img" aria-label="倍解析度座標系示意：placement layer 的 gate 欄在偶數 index、source/drain 欄在奇數 index，繞線層的 pitch 加倍後只落在偶數格點上">' +
+  '<rect x="0" y="0" width="820" height="220" fill="#0d131a"/>' +
+  '<text x="14" y="26" fill="#6d8093" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1.4">PLACEMENT LAYER  (PC / BPC / PC1)  pitch 保持原值</text>' +
+  '<line x1="60" y1="66" x2="780" y2="66" stroke="#22303d" stroke-width="1"/>' +
+  [0,1,2,3,4,5,6,7,8].map(function(i){
+    var x = 60 + i*90, even = i%2===0;
+    return '<line x1="'+x+'" y1="46" x2="'+x+'" y2="86" stroke="'+(even?'#ef4444':'#f59e0b')+'" stroke-width="'+(even?4:3)+'"/>' +
+           '<text x="'+x+'" y="106" fill="'+(even?'#ff9b8a':'#fbbf24')+'" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="middle">'+i+'</text>' +
+           '<text x="'+x+'" y="122" fill="#6d8093" font-family="IBM Plex Mono, monospace" font-size="9.5" text-anchor="middle">'+(even?'gate':'S/D')+'</text>';
+  }).join("") +
+  '<text x="14" y="164" fill="#6d8093" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1.4">ROUTING LAYER  (M1 / BM1 / H1)  pitch × 2 → 只對得上偶數格點</text>' +
+  '<line x1="60" y1="192" x2="780" y2="192" stroke="#22303d" stroke-width="1"/>' +
+  [0,2,4,6,8].map(function(i){
+    var x = 60 + i*90;
+    return '<line x1="'+x+'" y1="176" x2="'+x+'" y2="208" stroke="#8b5cf6" stroke-width="4"/>' +
+           '<line x1="'+x+'" y1="86" x2="'+x+'" y2="176" stroke="#8b5cf6" stroke-width="1" stroke-dasharray="3 5" opacity="0.45"/>';
+  }).join("") +
+  '<text x="795" y="70" fill="#6d8093" font-family="IBM Plex Mono, monospace" font-size="10" text-anchor="end"></text>' +
+'</svg>';
+const cap = document.createElement("figcaption");
+cap.textContent = "倍解析度座標系：placement layer 用原本的 pitch，所以 gate（偶數 index）與 source/drain（奇數 index）都落在整數上；其他所有層的 pitch 乘 2，只會對到偶數格點。虛線就是 via 邊唯一可能存在的位置 —— _build_graph 要求「同一個 (r, c) 在兩層都存在」才連跨層邊。";
+fig.append(cap);
+})();
+</script>

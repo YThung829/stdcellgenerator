@@ -1,0 +1,33 @@
+{
+  "skill_name": "stack3d-onboard-tech",
+  "note": "Run these against a scratch copy of tools/stack3d with the target architecture stripped out of layers.py, so there is a known-good answer to compare against.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "onboard-multi-tier-arch-from-scratch",
+      "prompt": "The stack3d viewer only shows FinFET and CFET. Add QFET to it too.",
+      "expected_output": "A QFET stack table and TECHS entry in layers.py, z order matching the layer JSON's layer_number sort (BM1 BM0 BPC1 H0 H1 PC1 M0 M1), backside layers at negative z, a solved INV_X1 under data/solved/qfet/, and a build that renders all three architectures with no orphan-layer warnings.",
+      "assertions": [
+        "layers.py gains a QFET stack table plus a TECHS entry, and TECH_ORDER includes QFET",
+        "build.py is NOT modified (the extension point is layers.py only)",
+        "the z order of metal layers matches the layer_number sort: BM1 < BM0 < BPC1 < H0 < H1 < PC1 < M0 < M1",
+        "backside layers (BM1/BM0/BPC1 and the BACK/B-prefixed device layers) sit at negative z, frontside at positive",
+        "the final build prints no 'have geometry but no stack entry' warning for QFET",
+        "the report states plainly that z thicknesses are illustrative and the ordering is derived"
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "explain-superimposed-tiers",
+      "prompt": "I opened our CFET cell in KLayout and the PMOS and NMOS diffusion are exactly on top of each other, same coordinates. Is the GDS writer broken?",
+      "expected_output": "Explains that identical x/y bounds with different datatypes is the correct CFET signature (both devices share one column footprint and differ only in z), that GDS is planar so it can only encode the tier as a datatype, and points at the stack3d viewer as the way to see the separation.",
+      "assertions": [
+        "does not claim the writer is broken",
+        "identifies the datatype (/1 vs /2) as the tier discriminator",
+        "explains that GDS is a planar format with no z, so this is expected"
+      ],
+      "files": []
+    }
+  ]
+}

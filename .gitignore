@@ -25,3 +25,7 @@ scratch/
 
 # Default CELLGEN_DATA_ROOT: sandbox working copies and the file-backed store
 .cellgen/
+
+# stack3d: binary GDS is a build product; the committed artifact is the
+# plain-text .gdstxt beside it (see tools/stack3d/gdstext.py).
+tools/stack3d/data/solved/*/*.gds

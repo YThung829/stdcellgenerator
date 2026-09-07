@@ -79,47 +79,68 @@ CFET = [
 ]
 
 # --------------------------------------------------------------------------
-# QFET -- frontside tier above, backside tier below, with an H0/H1 + MIV
-# ladder between them. Negative z is the backside. Ordering here mirrors the
-# layer_number ordering in PROBE3_QFET_2F_4T_4242OF21.json exactly:
+# QFET -- a FRONTSIDE and a BACKSIDE device tier, with an H0/H1 + MIV ladder
+# between them and a backside BEOL below. Negative z is the backside.
+#
+# Two things make this different from CFET, and both are load-bearing:
+#
+#  * A tier here is a WAFER FACE, not a device type. Each tier carries its own
+#    PMOS (row 2) and NMOS (row 0) -- see _compute_placement_row_indices in
+#    archit/QFET/main.py. So 11/1 vs 11/2 differ in Y, while 11/* vs 511/*
+#    differ in z. CFET's tiers, by contrast, ARE the P/N split.
+#  * The backside tier is a MIRROR of the frontside. BCA1 is declared
+#    BM0 -> BPC1 and BM0 sits BELOW BPC1 in the layer_number order, so the
+#    back device's contacts reach DOWNWARD: BLISD1 sits under the back
+#    diffusion, where LISD1 sits over the front one.
+#
+# Ordering mirrors the layer_number sort in PROBE3_QFET_2F_4T_4242OF21.json:
 #   BM1 < BV0 < BM0 < BCA1 < BPC1 < MIV1 < H0 < MIV2 < H1 < MIV3 < PC1 < CA1
 #   < M0 < V0 < M1
+#
+# Note there is NO LIG layer in the QFET stack (unlike FinFET/CFET), so CA1
+# lands directly on PC1 and the gate bar has to reach the CA1 reference plane
+# at z=74 rather than stopping at 62.
 # --------------------------------------------------------------------------
 QFET = [
-    ("519/0", "BM1",         -250, -236, "backbeol", "#a855f7", "backside M1, vertical, pitch 42 offset 21", 1),
-    ("518/0", "BV0",         -236, -222, "via",      "#e2e8f0", "backside via BM1 -> BM0", 1),
-    ("515/0", "BM0",         -222, -208, "backbeol", "#60a5fa", "backside M0, horizontal - carries the backside power rails", 1),
-    ("514/0", "BCA1",        -208, -192, "via",      "#e2e8f0", "backside contact BM0 -> BPC1", 1),
-    ("51/0",  "WELL_BACK",   -200, -176, "substrate","#64748b", "backside well marker", 0),
-    ("512/0", "NSELECT_BACK",-180, -176, "implant",  "#a78bfa", "backside n-implant", 0),
-    ("513/0", "PSELECT_BACK",-180, -176, "implant",  "#f472b6", "backside p-implant", 0),
-    ("502/0", "FIN_BACK",    -172, -130, "back",     "#0891b2", "backside-tier fin grid", 1),
-    ("511/1", "ACTIVE_BACK_P",-172,-126, "back",     "#059669", "backside PMOS diffusion (empty in this cell)", 1),
-    ("511/2", "ACTIVE_BACK_N",-172,-126, "back",     "#10b981", "backside NMOS diffusion (empty in this cell)", 1),
-    ("588/0", "BSDT1",       -164, -126, "back",     "#d97706", "backside source/drain trench", 1),
-    ("57/0",  "BPC1",        -172, -112, "back",     "#dc2626", "BACKSIDE gate poly - the 2nd placement tier", 1),
-    ("510/0", "GATE_CUT_BACK",-134,-112, "mask",     "#94a3b8", "backside gate cut", 0),
-    ("517/0", "BLISD1",      -126, -106, "back",     "#f59e0b", "backside local interconnect", 1),
-    ("5000/0","MIV1",        -106,  -90, "miv",      "#f0abfc", "monolithic inter-tier via BPC1 -> H0", 1),
-    ("600/0", "H0",           -90,  -76, "mid",      "#2dd4bf", "inter-tier routing layer, horizontal, pitch 24", 1),
-    ("5001/0","MIV2",         -76,  -62, "miv",      "#f0abfc", "MIV H0 -> H1", 1),
-    ("601/0", "H1",           -62,  -48, "mid",      "#14b8a6", "inter-tier routing layer, vertical, pitch 42 offset 21", 1),
-    ("5002/0","MIV3",         -48,   -4, "miv",      "#f0abfc", "MIV H1 -> PC1 (climbs into the front tier)", 1),
-    ("700/0", "VL1 (virtual)",-112,   0, "virtual",  "#facc15", "GRAPH-ONLY jump BPC1 <-> PC1. No mask, no geometry - it only exists as an edge in the LayeredGridGraph.", 0),
-    ("1/0",   "WELL_FRONT",   -28,   -4, "substrate","#64748b", "frontside well marker", 0),
-    ("12/0",  "NSELECT_FRONT", -6,   -2, "implant",  "#a78bfa", "frontside n-implant", 0),
-    ("13/0",  "PSELECT_FRONT", -6,   -2, "implant",  "#f472b6", "frontside p-implant", 0),
-    ("2/0",   "FIN_FRONT",      0,   42, "device",   "#22d3ee", "frontside fin grid", 1),
-    ("11/1",  "ACTIVE_FRONT_P", 0,   46, "device",   "#34d399", "frontside PMOS diffusion", 1),
-    ("11/2",  "ACTIVE_FRONT_N", 0,   46, "device",   "#10b981", "frontside NMOS diffusion", 1),
-    ("88/0",  "SDT1",           8,   46, "device",   "#f59e0b", "frontside source/drain trench", 1),
-    ("7/0",   "PC1",            0,   62, "device",   "#ef4444", "FRONTSIDE gate poly - the 1st placement tier", 1),
-    ("10/0",  "GATE_CUT_FRONT",44,   66, "mask",     "#94a3b8", "frontside gate cut", 0),
-    ("17/0",  "LISD1",         46,   74, "mol",      "#fbbf24", "frontside local interconnect", 1),
-    ("14/0",  "CA1",           74,   90, "via",      "#e2e8f0", "contact PC1 -> M0", 1),
-    ("15/0",  "M0",            90,  104, "beol",     "#3b82f6", "M0, horizontal, pitch 24", 1),
-    ("18/0",  "V0",           104,  118, "via",      "#e2e8f0", "via M0 -> M1", 1),
-    ("19/0",  "M1",           118,  132, "beol",     "#8b5cf6", "M1, vertical, pitch 42 offset 21", 1),
+    # ---- backside BEOL (deepest) ----
+    ("519/0", "BM1",           -208, -194, "backbeol", "#a855f7", "backside M1, vertical, pitch 42 offset 21", 1),
+    ("518/0", "BV0",           -194, -180, "via",      "#e2e8f0", "backside via BM1 -> BM0", 1),
+    ("515/0", "BM0",           -180, -166, "backbeol", "#60a5fa", "backside M0, horizontal, pitch 24 - carries the backside power rails and backside pin access", 1),
+    ("514/0", "BCA1",          -166, -150, "via",      "#e2e8f0", "backside contact BM0 -> BPC1", 1),
+    # ---- backside device tier (mirrored: MOL BELOW the diffusion) ----
+    ("57/0",  "BPC1",          -150,  -76, "back",     "#dc2626", "BACKSIDE gate poly - the 2nd placement tier", 1),
+    ("517/0", "BLISD1",        -150, -122, "back",     "#f59e0b", "backside local interconnect to source/drain, feeding DOWN to BCA1", 1),
+    ("510/0", "GATE_CUT_BACK", -142, -120, "mask",     "#94a3b8", "backside gate cut", 0),
+    ("588/0", "BSDT1",         -122,  -84, "back",     "#d97706", "backside source/drain trench (epi)", 1),
+    ("511/1", "ACTIVE_BACK_P", -122,  -76, "back",     "#059669", "backside diffusion, PMOS band (upper Y). Empty when every device lands on the front tier.", 1),
+    ("511/2", "ACTIVE_BACK_N", -122,  -76, "back",     "#10b981", "backside diffusion, NMOS band (lower Y). Empty when every device lands on the front tier.", 1),
+    ("502/0", "FIN_BACK",      -118,  -76, "back",     "#0891b2", "backside fin grid (hardcoded 502/0 in the writer, not in the layer JSON)", 1),
+    # ---- inter-tier ladder ----
+    ("5000/0","MIV1",           -76,  -59, "miv",      "#f0abfc", "monolithic inter-tier via BPC1 -> H0", 1),
+    ("700/0", "VL1 (virtual)",  -76,    0, "virtual",  "#facc15", "GRAPH-ONLY jump BPC1 <-> PC1 (method=overlap). No mask, no geometry - it exists only as an edge in the LayeredGridGraph, and the writer draws it only under --draw-virtual.", 0),
+    ("512/0", "NSELECT_BACK",   -74,  -71, "implant",  "#a78bfa", "backside n-implant mask", 0),
+    ("513/0", "PSELECT_BACK",   -74,  -71, "implant",  "#f472b6", "backside p-implant mask", 0),
+    ("51/0",  "WELL_BACK",      -69,  -61, "substrate","#64748b", "backside well marker", 0),
+    ("600/0", "H0",             -59,  -45, "mid",      "#2dd4bf", "inter-tier routing layer, horizontal, pitch 24", 1),
+    ("5001/0","MIV2",           -45,  -31, "miv",      "#f0abfc", "MIV H0 -> H1", 1),
+    ("601/0", "H1",             -31,  -17, "mid",      "#14b8a6", "inter-tier routing layer, vertical, pitch 42 offset 21", 1),
+    ("5002/0","MIV3",           -17,    0, "miv",      "#f0abfc", "MIV H1 -> PC1 (climbs into the front tier)", 1),
+    # ---- frontside device tier ----
+    ("1/0",   "WELL_FRONT",     -15,   -7, "substrate","#64748b", "frontside well marker", 0),
+    ("12/0",  "NSELECT_FRONT",   -5,   -2, "implant",  "#a78bfa", "frontside n-implant mask", 0),
+    ("13/0",  "PSELECT_FRONT",   -5,   -2, "implant",  "#f472b6", "frontside p-implant mask", 0),
+    ("2/0",   "FIN_FRONT",        0,   42, "device",   "#22d3ee", "frontside fin grid (hardcoded 2/0 in the writer)", 1),
+    ("11/1",  "ACTIVE_FRONT_P",   0,   46, "device",   "#34d399", "frontside diffusion, PMOS band (upper Y)", 1),
+    ("11/2",  "ACTIVE_FRONT_N",   0,   46, "device",   "#10b981", "frontside diffusion, NMOS band (lower Y)", 1),
+    ("7/0",   "PC1",              0,   74, "device",   "#ef4444", "FRONTSIDE gate poly - the 1st placement tier. Runs up to the CA1 plane because QFET has no LIG layer.", 1),
+    ("88/0",  "SDT1",             8,   46, "device",   "#f59e0b", "frontside source/drain trench (epi)", 1),
+    ("10/0",  "GATE_CUT_FRONT",  44,   66, "mask",     "#94a3b8", "frontside gate cut", 0),
+    ("17/0",  "LISD1",           46,   74, "mol",      "#fbbf24", "frontside local interconnect to source/drain, feeding UP to CA1", 1),
+    # ---- frontside BEOL ----
+    ("14/0",  "CA1",             74,   90, "via",      "#e2e8f0", "contact PC1 -> M0", 1),
+    ("15/0",  "M0",              90,  104, "beol",     "#3b82f6", "M0, horizontal, pitch 24", 1),
+    ("18/0",  "V0",             104,  118, "via",      "#e2e8f0", "via M0 -> M1", 1),
+    ("19/0",  "M1",             118,  132, "beol",     "#8b5cf6", "M1, vertical, pitch 42 offset 21", 1),
 ]
 
 # --------------------------------------------------------------------------
@@ -186,9 +207,9 @@ TECHS = {
         "gds_writer": "gds_QFET_SH",
         "gds_argv": ["--result", "{res}", "--layer", "{layer}",
                      "--subckt", "{cell}", "--gds", "{gds}", "--draw-virtual"],
-        "arch": "正面 + 背面 (2 tier)",
+        "arch": "正面 + 背面雙面 (2 tier)",
         "placement": "PC1 (正面) / BPC1 (背面)",
-        "pin_access": "BM0, M0",
+        "pin_access": "M0 (正面) / BM0 (背面)",
         "virtual": "VL1: BPC1↔PC1 (overlap)",
     },
 }
@@ -203,6 +224,7 @@ TECH_ORDER = ["FinFET", "CFET", "QFET"]
 ALPHA = {
     "FinFET": {"7/0": 0.42, "11/0": 0.86, "10/0": 0.5},
     "CFET":   {"7/0": 0.30, "11/1": 0.88, "11/2": 0.88, "10/0": 0.5},
-    "QFET":   {"7/0": 0.42, "57/0": 0.42, "11/1": 0.88, "11/2": 0.88,
-               "10/0": 0.5, "510/0": 0.5, "700/0": 0.45},
+    "QFET":   {"7/0": 0.34, "57/0": 0.34,
+               "11/1": 0.88, "11/2": 0.88, "511/1": 0.88, "511/2": 0.88,
+               "10/0": 0.5, "510/0": 0.5, "700/0": 0.3},
 }

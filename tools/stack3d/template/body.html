@@ -65,7 +65,7 @@
       <tr><th>幾何本質</th><td>單層平面：P/N 左右分列在同一平面的上下兩個 row band</td><td>2 層垂直堆疊：一顆元件直接壓在另一顆上面，共用同一個 column footprint</td><td>正面 + 背面兩個 tier，中間夾一組層間繞線</td></tr>
       <tr><th><code>placement_layer_names</code></th><td><span class="mono">{PC}</span></td><td><span class="mono">{PC, BPC}</span></td><td><span class="mono">{PC1, BPC1}</span></td></tr>
       <tr><th><code>pin_access_layer_names</code></th><td><span class="mono">{M0}</span></td><td><span class="mono">{BPC, M0}</span></td><td><span class="mono">{BM0, M0}</span></td></tr>
-      <tr><th>P / N 怎麼分</th><td>靠 row：NMOS 放 row 0、PMOS 放 row 2</td><td>靠 tier：<code>stacking_config</code> = <span class="mono">P_on_N</span> 或 <span class="mono">N_on_P</span>，決定誰在 PC 誰在 BPC</td><td>靠 row（同 FinFET），tier 由 solver 自己選 <span class="mono">z_var</span></td></tr>
+      <tr><th>P / N 怎麼分</th><td>靠 row：NMOS 放 row 0、PMOS 放 row 2</td><td><b>靠 tier</b>：<code>stacking_config</code> = <span class="mono">P_on_N</span> 或 <span class="mono">N_on_P</span>，決定誰在 PC 誰在 BPC</td><td><b>靠 row</b>（同 FinFET）。tier 是正面/背面兩個<b>晶圓面</b>，不是 P/N 之分 —— 每個 tier 各自有自己的 PMOS 和 NMOS，落在哪一面由 solver 選 <span class="mono">z_var</span></td></tr>
       <tr><th>LGG z 順序<br><span class="ref">(metal_layers 依 layer_number 排序)</span></th><td class="mono">PC · M0 · M1 · M2</td><td class="mono">BPC · PC · M0 · M1 · M2</td><td class="mono">BM1 · BM0 · BPC1 · H0 · H1 · PC1 · M0 · M1</td></tr>
       <tr><th>虛擬邊 (virtual edge)</th><td>無</td><td><span class="mono">("BPC","M0")</span>，method <span class="mono">boundary</span>，寫死在 <code>_init_graph</code></td><td><span class="mono">VL1: BPC1↔PC1</span>，method <span class="mono">overlap</span>，由 layer JSON 的 <span class="mono">"layer_type":"virtual"</span> 宣告</td></tr>
       <tr><th>MOL 當繞線資源</th><td>可選（<code>lig_routing</code> / <code>lisd_routing</code> 預設 false）</td><td>強制開啟 — <code>config.py</code> 看到 <span class="mono">tech=="CFET"</span> 就把兩個 flag 設 true</td><td>由 preset 的 <code>CONFIG_OVERRIDES</code> 打開</td></tr>
@@ -77,7 +77,11 @@
   <div class="note">
     <p><b>看 CFET 立體圖時注意這件事：</b>把上面的 viewer 切到 CFET，會發現 <code>N_ACTIVE</code>(11/2) 和 <code>P_ACTIVE</code>(11/1) 的 x/y 邊界一模一樣 — 都是 <span class="mono">x[15.5, 74.5] y[19, 125]</span>。這不是畫錯，這正是 CFET：兩顆元件佔用同一塊平面面積，只差在 z。GDS 是平面格式，它只能用 datatype（<span class="mono">/1</span> vs <span class="mono">/2</span>）來區分上下 tier，所以在 2D layout viewer 裡兩層是完全疊死的 — 立體圖才把這個差別攤開。</p>
   </div>
-  <p>同理，CFET 的 gate 在 GDS 裡只有一根 <span class="mono">7/0</span> 的柱子貫穿整個 cell 高度：實體上 CFET 的 gate stack 本來就穿過上下兩顆元件，所以 writer 不需要（也不能）畫成兩根。我在立體圖裡把它的 z 區間設成 <span class="mono">0 → 150</span> 橫跨兩個 tier，就是要凸顯這件事。</p>
+  <div class="note">
+    <p><b>QFET 的 tier 跟 CFET 的 tier 不是同一回事。</b>CFET 的兩個 tier <em>就是</em> P/N 之分（<code>stacking_config</code> 決定誰在上）。QFET 的兩個 tier 是晶圓的<b>正面和背面</b>，每一面都各自擺得下 PMOS 和 NMOS —— <code>_compute_placement_row_indices</code> 給的是 <span class="mono">NMOS row 0 / PMOS row 2</span>，跟 FinFET 一樣是 row 之分。所以在 QFET 裡 <span class="mono">11/1</span> 和 <span class="mono">11/2</span> 差在 Y，<span class="mono">11/*</span> 和 <span class="mono">511/*</span> 才是差在 z。</p>
+    <p>這也是為什麼背面 tier 是正面的<b>鏡像</b>：<span class="mono">BCA1</span> 宣告是 <span class="mono">BM0 → BPC1</span>，而 <span class="mono">BM0</span> 的 <code>layer_number</code> 比 <span class="mono">BPC1</span> 小（在下面），所以背面元件的接觸要<b>往下</b>走 —— <span class="mono">BLISD1</span> 在背面 diffusion 底下，而正面的 <span class="mono">LISD1</span> 在 diffusion 上面。</p>
+  </div>
+  <p>同理，CFET 的 gate 在 GDS 裡只有<b>一個圖層</b> <span class="mono">7/0</span>（這顆 INV 上是 3 根柱子，每個 CPP 一根），而不是上下 tier 各一層：實體上 CFET 的 gate stack 本來就穿過上下兩顆元件，所以 writer 不需要（也不能）把它拆成兩層。我在立體圖裡把它的 z 區間設成 <span class="mono">0 → 150</span> 橫跨兩個 tier，就是要凸顯這件事。</p>
 </section>
 
 <section class="blk">

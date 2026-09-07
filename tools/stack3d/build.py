@@ -48,7 +48,7 @@ REPO = HERE.parents[1]
 
 sys.path.insert(0, str(HERE))
 import layers as L  # noqa: E402  (path set above)
-from dump_gds import dump  # noqa: E402
+from gdstext import read_text  # noqa: E402
 
 DEFAULT_ENGINE = Path(os.environ.get("STACK3D_ENGINE", REPO / "engine"))
 DEFAULT_CELL = os.environ.get("STACK3D_CELL", "INV_X1")
@@ -160,6 +160,50 @@ def regen_gds(ctx, cfg: dict) -> None:
     argv = [f"src.cellgen.postprocess.{cfg['gds_writer']}"]
     argv += [a.format(**fields) for a in cfg["gds_argv"]]
     run_engine(ctx, argv)
+    # Re-encode immediately, so the committed text artifact can never drift
+    # from the binary it was made from.
+    from dump_gds import dump
+    from gdstext import write_text
+    txt = run_dir / f"{ctx.cell}.gdstxt"
+    n = write_text(dump(str(gds)), txt)
+    print(f"    encoded {txt.name} ({n} shapes)")
+
+
+# --------------------------------------------------------------------------
+# geometry input
+# --------------------------------------------------------------------------
+def load_geometry(ctx, cfg: dict, tech: str) -> dict:
+    """Return {gds_key: {polygons, texts}} for this architecture's cell.
+
+    Prefers the committed plain-text .gdstxt over the binary .gds. That is the
+    whole point of the text format: a checkout can rebuild the page with
+    nothing but the Python standard library, and nothing binary has to cross
+    into an environment that only accepts text. The .gds path stays as a
+    fallback for a freshly generated file that has not been encoded yet.
+    """
+    run_dir = ctx.run_dir(cfg)
+    txt = run_dir / f"{ctx.cell}.gdstxt"
+    gds = run_dir / f"{ctx.cell}.gds"
+    if txt.is_file():
+        data = read_text(txt)
+    elif gds.is_file():
+        from dump_gds import dump          # only this path needs klayout
+        data = dump(str(gds))
+        print(f"  ({tech}: read {gds.name}; run "
+              f"`gdstext.py encode` to commit it as text)")
+    else:
+        raise SystemExit(
+            f"{tech}: no geometry at {txt} or {gds}.\n"
+            f"  -> --gds regenerates the .gds from the .res (needs klayout),\n"
+            f"     --solve --gds re-solves the cell first (needs the engine's\n"
+            f"     full dependencies)."
+        )
+    if ctx.cell not in data["cells"]:
+        raise SystemExit(
+            f"{tech}: {ctx.cell} not found in that file. "
+            f"It holds: {sorted(data['cells'])}"
+        )
+    return data["cells"][ctx.cell]
 
 
 # --------------------------------------------------------------------------
@@ -170,14 +214,7 @@ def build_payload(ctx, techs_wanted: list) -> dict:
     for tech in techs_wanted:
         cfg = L.TECHS[tech]
         run_dir = ctx.run_dir(cfg)
-        gds_path = run_dir / f"{ctx.cell}.gds"
-        if not gds_path.is_file():
-            raise SystemExit(
-                f"{tech}: no GDS at {gds_path}.\n"
-                f"  -> run with --solve --gds to generate it, or --gds if the "
-                f".res is already there."
-            )
-        cell = dump(str(gds_path))["cells"][ctx.cell]
+        cell = load_geometry(ctx, cfg, tech)
 
         stack = []
         for key, name, z0, z1, group, color, note, on in cfg["stack"]:

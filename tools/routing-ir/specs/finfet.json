@@ -1,0 +1,123 @@
+{
+  "schema": "smtcell/routing-ir@1",
+  "name": "FinFET",
+  "summary": "單層平面。P/N 在同一平面的兩條 row band，靠 row 分開。",
+  "source": {
+    "layer_json": "PROBE3_FinFET_2F_4T_4530OF0.json",
+    "preset": "FinFET_4T_SH"
+  },
+  "tiers": [
+    {
+      "id": "front",
+      "devices": [
+        "nmos",
+        "pmos"
+      ],
+      "note": "唯一的放置層。NMOS 在 row 0、PMOS 在 row 2。"
+    }
+  ],
+  "layers": [
+    {
+      "id": "OD",
+      "class": "od",
+      "tier": "front",
+      "in_graph": false,
+      "access_via": "PC",
+      "gds": "11/0",
+      "note": "擴散區。router 只需要知道它在哪，不會沿著它繞。"
+    },
+    {
+      "id": "MD",
+      "class": "md",
+      "contacts": "source_drain",
+      "tier": "front",
+      "in_graph": false,
+      "access_via": "PC",
+      "enabled_by": "lisd_routing",
+      "gds": "17/0",
+      "note": "S/D 區域互連（LISD）。不是 graph 層 —— 打開 lisd_routing 等於允許 PC<->M0 的 via 落在 S/D 欄上。"
+    },
+    {
+      "id": "MG",
+      "class": "md",
+      "contacts": "gate",
+      "tier": "front",
+      "in_graph": false,
+      "access_via": "PC",
+      "enabled_by": "lig_routing",
+      "gds": "16/0",
+      "note": "Gate 區域互連（LIG）。同上，但對應的是 gate 欄。"
+    },
+    {
+      "id": "PC",
+      "class": "poly",
+      "in_graph": true,
+      "direction": "V",
+      "pitch": 45.0,
+      "offset": 0.0,
+      "width": 16.0,
+      "gds": "7/0",
+      "tier": "front"
+    },
+    {
+      "id": "M0",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "H",
+      "pitch": 24,
+      "offset": 0.0,
+      "width": 14.0,
+      "gds": "15/0"
+    },
+    {
+      "id": "M1",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "V",
+      "pitch": 30.0,
+      "offset": 0.0,
+      "width": 14.0,
+      "gds": "19/0"
+    },
+    {
+      "id": "M2",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "H",
+      "pitch": 24.0,
+      "offset": 0.0,
+      "width": 14.0,
+      "gds": "20/0"
+    }
+  ],
+  "connect": [
+    {
+      "lower": "PC",
+      "upper": "M0",
+      "via": "CA",
+      "gds": "14/0"
+    },
+    {
+      "lower": "M0",
+      "upper": "M1",
+      "via": "V0",
+      "gds": "18/0"
+    },
+    {
+      "lower": "M1",
+      "upper": "M2",
+      "via": "V1",
+      "gds": "21/0"
+    }
+  ],
+  "shortcuts": [],
+  "pins": {
+    "access": [
+      "M0"
+    ],
+    "io": [
+      "M0"
+    ]
+  },
+  "grid": {}
+}

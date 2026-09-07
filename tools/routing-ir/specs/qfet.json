@@ -1,0 +1,215 @@
+{
+  "schema": "smtcell/routing-ir@1",
+  "name": "QFET",
+  "summary": "正面 + 背面兩個晶圓面。每一面各有自己的 PMOS 和 NMOS，靠 row 分開。",
+  "source": {
+    "layer_json": "PROBE3_QFET_2F_4T_4242OF21.json",
+    "preset": "QFET_4T_SH"
+  },
+  "tiers": [
+    {
+      "id": "back",
+      "devices": [
+        "nmos",
+        "pmos"
+      ],
+      "note": "背面。接觸往下走到 BM0。"
+    },
+    {
+      "id": "front",
+      "devices": [
+        "nmos",
+        "pmos"
+      ],
+      "note": "正面。tier 是晶圓面，不是 P/N 之分。"
+    }
+  ],
+  "layers": [
+    {
+      "id": "OD_BACK",
+      "class": "od",
+      "tier": "back",
+      "in_graph": false,
+      "access_via": "BPC1",
+      "gds": "511/1",
+      "note": "背面擴散區（P band 11/1 與 N band 11/2 各一）"
+    },
+    {
+      "id": "OD_FRONT",
+      "class": "od",
+      "tier": "front",
+      "in_graph": false,
+      "access_via": "PC1",
+      "gds": "11/1",
+      "note": "正面擴散區"
+    },
+    {
+      "id": "MD_BACK",
+      "class": "md",
+      "contacts": "source_drain",
+      "tier": "back",
+      "in_graph": false,
+      "access_via": "BPC1",
+      "enabled_by": "lisd_routing",
+      "gds": "517/0",
+      "note": "背面 S/D 區域互連，往下接到 BCA1"
+    },
+    {
+      "id": "MD_FRONT",
+      "class": "md",
+      "contacts": "source_drain",
+      "tier": "front",
+      "in_graph": false,
+      "access_via": "PC1",
+      "enabled_by": "lisd_routing",
+      "gds": "17/0",
+      "note": "正面 S/D 區域互連，往上接到 CA1"
+    },
+    {
+      "id": "BM1",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "V",
+      "pitch": 42.0,
+      "offset": 21.0,
+      "width": 14.0,
+      "gds": "519/0"
+    },
+    {
+      "id": "BM0",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "H",
+      "pitch": 24.0,
+      "offset": 0.0,
+      "width": 14.0,
+      "gds": "515/0",
+      "io_pin": true
+    },
+    {
+      "id": "BPC1",
+      "class": "poly",
+      "in_graph": true,
+      "direction": "V",
+      "pitch": 42.0,
+      "offset": 0.0,
+      "width": 16.0,
+      "gds": "57/0",
+      "tier": "back"
+    },
+    {
+      "id": "H0",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "H",
+      "pitch": 24.0,
+      "offset": 0.0,
+      "width": 14.0,
+      "gds": "600/0"
+    },
+    {
+      "id": "H1",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "V",
+      "pitch": 42.0,
+      "offset": 21.0,
+      "width": 16.0,
+      "gds": "601/0"
+    },
+    {
+      "id": "PC1",
+      "class": "poly",
+      "in_graph": true,
+      "direction": "V",
+      "pitch": 42.0,
+      "offset": 0.0,
+      "width": 16.0,
+      "gds": "7/0",
+      "tier": "front"
+    },
+    {
+      "id": "M0",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "H",
+      "pitch": 24.0,
+      "offset": 0.0,
+      "width": 14.0,
+      "gds": "15/0",
+      "io_pin": true
+    },
+    {
+      "id": "M1",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "V",
+      "pitch": 42.0,
+      "offset": 21.0,
+      "width": 14.0,
+      "gds": "19/0"
+    }
+  ],
+  "connect": [
+    {
+      "lower": "BM1",
+      "upper": "BM0",
+      "via": "BV0",
+      "gds": "518/0"
+    },
+    {
+      "lower": "BM0",
+      "upper": "BPC1",
+      "via": "BCA1",
+      "gds": "514/0"
+    },
+    {
+      "lower": "BPC1",
+      "upper": "H0",
+      "via": "MIV1",
+      "gds": "5000/0"
+    },
+    {
+      "lower": "H0",
+      "upper": "H1",
+      "via": "MIV2",
+      "gds": "5001/0"
+    },
+    {
+      "lower": "H1",
+      "upper": "PC1",
+      "via": "MIV3",
+      "gds": "5002/0"
+    },
+    {
+      "lower": "PC1",
+      "upper": "M0",
+      "via": "CA1",
+      "gds": "14/0"
+    },
+    {
+      "lower": "M0",
+      "upper": "M1",
+      "via": "V0",
+      "gds": "18/0"
+    }
+  ],
+  "shortcuts": [
+    {
+      "a": "BPC1",
+      "b": "PC1",
+      "method": "overlap"
+    }
+  ],
+  "pins": {
+    "access": [
+      "BM0",
+      "M0"
+    ],
+    "io": [
+      "BM0",
+      "M0"
+    ]
+  },
+  "grid": {}
+}

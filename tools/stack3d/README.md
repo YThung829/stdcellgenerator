@@ -98,6 +98,63 @@ GDS 層，立體圖會把它畫在上層 tier 的高度。要處理的話得改�
   `--draw-virtual` 才會把它畫在 debug layer 700 上，走它要付
   `virtual_edge_cost`（預設 5，比 metal 的 1 和 via 的 3 貴）。
 
+## 新製程怎麼進來
+
+製程工程師講的是概念，不是 GDS datatype。所以交接格式反過來設計：**工程師只講
+順序和角色，z 由系統算**。
+
+複製 `techs/_TEMPLATE.toml`，由下而上把層列出來：
+
+```toml
+[[layer]]
+name = "N_ACTIVE"
+role = "diffusion"       # 這層「是什麼」—— 決定預設厚度、顏色、分組
+gds  = "11/2"
+align = "FIN"            # 跟 fin 從同一個高度起算
+thickness = 46
+```
+
+**工程師不用打任何一個座標。** 這很關鍵 —— z 厚度正是整個 repo 唯一不知道的東西
+（見 `layers.py` 的說明），要他們憑空發明反而會做出假的精確。
+
+擺放只有四種寫法，涵蓋了三個現有架構的全部情況：
+
+| 寫法 | 意思 |
+|---|---|
+| 什麼都不寫 | 接在上一層正上方（BEOL 幾乎都是這樣） |
+| `gap = 26` | 往上空 26nm 再開始（tier 之間的隔離） |
+| `align = "FIN"` | 跟 FIN 同高度起算；再加 `offset` 就是往上偏移 |
+| `span = ["A","B"]` | 不佔自己的高度，從 A 的底貫穿到 B 的頂（CFET 的 gate） |
+
+```bash
+python tools/stack3d/techspec.py --check          # 驗證所有 techs/*.toml
+python tools/stack3d/techspec.py --show MYTECH    # 看編譯出來的堆疊表
+python tools/stack3d/techspec.py --export CFET    # 從既有 tech 反推一份範例
+```
+
+錯誤訊息用工程師的詞彙講，會指名是哪一層、該怎麼改：
+
+```
+T: layer 'ACTIVE' aligns to 'FN', which is not a layer listed before it
+T: layer 'ACTIVE' has no `gds`. Every drawn layer needs its GDS layer/datatype,
+   e.g. gds = "11/2". If it is deliberately never drawn, set role = "model_only".
+```
+
+### 為什麼是 TOML
+
+可以寫註解、長得像 INI 檔（工程師看得懂），而且 **`tomllib` 在 Python 3.11+
+的標準函式庫裡** —— 所以整條 pipeline 仍然零相依，在無網路環境照樣重建。
+（YAML 好看但 PyYAML 要安裝；JSON 不能寫註解。）
+
+### 這個格式表達力夠嗎
+
+夠 —— 已驗證過。把現有三個架構全部 `--export` 成 TOML 再編譯回去，
+**堆疊表逐層、逐個 z 值完全相同**（包含 QFET 的背面鏡像和 CFET 貫穿兩層的
+gate）。所以現在 `techs/*.toml` 就是唯一的真實來源，`layers.py` 只剩載入。
+
+轉換過程也抓到一個原本的分類錯誤：QFET 的 `MIV1/2/3` 被歸成 gate 而變半透明，
+應該是 via。
+
 ## 製程遷移
 
 `migrations/finfet_to_cfet.json` 用一個跟幾何分開的中間表達式，描述兩個製程之間的
@@ -237,7 +294,10 @@ python tools/stack3d/build.py            # 約 674 KB，完全離線（預設）
 | 檔案 | 職責 |
 |---|---|
 | `build.py` | 主流程：（可選）重解 → （可選）重產 GDS → 組 payload → 組 HTML |
-| `layers.py` | **z 模型**：每個 tech 的層堆疊表、顏色、群組、透明度 |
+| `techs/*.toml` | **製程描述表** —— 製程工程師填的那份，由下而上列層與 role |
+| `techs/_TEMPLATE.toml` | 空白範本，附完整註解與 role 一覽 |
+| `techspec.py` | 把描述表編譯成堆疊表；`--check` 驗證、`--show` 看結果、`--export` 從既有 tech 反推 |
+| `layers.py` | 載入 `techs/*.toml` 的薄殼（以前 z 模型寫死在這裡） |
 | `dump_gds.py` | 讀 GDS，把每個 shape 依 `(layer, datatype)` dump 成 nm 座標 |
 | `gdstext.py` | GDS ↔ 純文字的雙向轉換（`encode` / `decode` / `verify`） |
 | `audit.py` | 逐項比對立體圖的宣稱與 engine 來源檔案 |

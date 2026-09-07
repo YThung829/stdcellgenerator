@@ -1,0 +1,161 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  製程架構描述表
+#
+#  給製程工程師填的。填完存成 techs/<名字>.toml，系統就吃得進去，
+#  不用改任何程式。
+#
+#  三個原則：
+#    1. 由下而上列。順序就是製程順序，你怎麼寫就怎麼算。
+#    2. 只講「這層是什麼」和「多厚」，不用算座標。z 由系統算。
+#    3. 不確定的欄位可以留空，`techspec.py --check` 會告訴你缺什麼。
+#
+#  驗證：  python tools/stack3d/techspec.py --check
+#  看結果：python tools/stack3d/techspec.py --show <名字>
+#
+#  已完成的實例可以直接參考：finfet.toml / cfet.toml / qfet.toml
+# ═══════════════════════════════════════════════════════════════════════════
+
+schema  = "stack3d/tech@1"
+name    = "MYTECH"          # 架構代號，會顯示在立體圖的切換按鈕上
+order   = 3                 # 切換按鈕的排列順序
+summary = "一句話說明這個架構的幾何本質"
+
+
+# ── 元件層（tier）────────────────────────────────────────────────────────
+#  有幾個「放置層」就宣告幾個，由下而上。
+#  單層平面架構（像 FinFET）可以整段刪掉不寫。
+[[tier]]
+name = "bottom"
+
+[[tier]]
+name = "top"
+
+
+# ── 給看圖的人的說明（純文字，會顯示在頁面的規格列）──────────────────
+[geometry]
+summary       = "兩層垂直堆疊，上下共用同一塊平面面積"
+placement     = "PC（上）/ BPC（下）"
+pin_access    = "BPC, M0"
+virtual_edges = "BPC↔M0"
+
+
+# ── 接到 engine（這半段不是製程工程師的工作）────────────────────────────
+#  由維護這個工具的人填。指向 engine 裡對應的 preset、layer JSON、GDS writer。
+[bind]
+preset     = "MYTECH_4T_SH"                       # engine/input/presets/<這個>.mk
+layer_json = "PROBE3_MYTECH_2F_4T_4530OF0.json"   # engine/input/layer/<這個>
+gds_writer = "gds_MYTECH_SH"                      # src/cellgen/postprocess/<這個>.py
+gds_argv   = ["--result_file", "{res}", "--subckt_name", "{cell}",
+              "--layer", "{layer}", "--gds_file", "{gds}"]
+# ignore_keys = ["11/0"]    # writer 有畫、但故意不呈現的層（例如重複的合集）
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  疊構 —— 由下而上，一層一個 [[layer]]
+#
+#  必填：name / role / gds
+#  選填：thickness（不填就用 role 的預設）、tier、note、
+#        以及下面四種「擺哪裡」的方式其中一種
+#
+#  ┌─ 擺放方式 ────────────────────────────────────────────────────────┐
+#  │  什麼都不寫        接在上一層的正上方（最常見，BEOL 都是這樣）      │
+#  │  gap = 20          往上空 20nm 再開始（例如兩個 tier 之間的隔離）   │
+#  │  align = "FIN"     跟 FIN 從同一個高度起算（同一個製程階段的層）    │
+#  │  align = "FIN"     再加 offset = 8，就是「在 FIN 裡面往上 8nm」     │
+#  │  span = ["A","B"]  不佔自己的高度，而是從 A 的底貫穿到 B 的頂       │
+#  │                    （CFET 那根穿過上下兩顆元件的 gate 就是這個）    │
+#  └────────────────────────────────────────────────────────────────────┘
+#
+#  ┌─ role 一覽（決定預設厚度、顏色、分組、是否預設顯示）─────────────┐
+#  │  substrate   基板 / well 標記                                      │
+#  │  implant     佈植遮罩（NSELECT / PSELECT）                         │
+#  │  channel     通道（fin / nanosheet）                               │
+#  │  diffusion   擴散區 / active                                       │
+#  │  sd_trench   source/drain trench（epi）                            │
+#  │  gate        閘極（poly / PC / BPC）                               │
+#  │  cut         切割遮罩（gate cut）                                  │
+#  │  mol_sd      接到 source/drain 的區域互連（LISD）                  │
+#  │  mol_gate    接到 gate 的區域互連（LIG）                           │
+#  │  via         接觸窗 / via / MIV                                    │
+#  │  metal       金屬層（M0 / M1 / BM0 / H0 …）                        │
+#  │  virtual     只存在於繞線圖上的邊，沒有光罩                        │
+#  │  model_only  solver 認得、但 writer 從不繪製（填 gds 也沒關係）    │
+#  └────────────────────────────────────────────────────────────────────┘
+#
+#  gds 欄位填「圖層號/datatype」，例如 "11/2"。
+#  不知道填什麼的話，先跑：
+#      python tools/stack3d/inspect_tech.py --name MYTECH --gds <一顆解好的.gds>
+#  它會把 writer 實際畫出來的層全部列出來。
+# ═══════════════════════════════════════════════════════════════════════════
+
+[[layer]]
+name = "WELL"
+role = "substrate"
+gds  = "1/0"
+align = "origin"
+offset = -28          # 基板在 0 以下
+thickness = 24
+note = "基板 / well 標記"
+
+[[layer]]
+name = "FIN"
+role = "channel"
+gds  = "2/0"
+tier = "bottom"
+thickness = 42
+note = "下層元件的通道"
+
+[[layer]]
+name = "N_ACTIVE"
+role = "diffusion"
+gds  = "11/2"
+tier = "bottom"
+align = "FIN"         # 跟 fin 同一個高度 —— 擴散區包住通道
+thickness = 46
+note = "下層 tier 的擴散區（NMOS）"
+
+[[layer]]
+name = "N_LISD"
+role = "mol_sd"
+gds  = "17/2"
+tier = "bottom"
+thickness = 20
+note = "下層 tier 的 source/drain 區域互連"
+
+[[layer]]
+name = "P_ACTIVE"
+role = "diffusion"
+gds  = "11/1"
+tier = "top"
+gap = 26              # 兩個 tier 之間的隔離
+thickness = 46
+note = "上層 tier 的擴散區（PMOS）—— 跟 N_ACTIVE 的 x/y 完全一樣，只差在 z"
+
+[[layer]]
+name = "P_LISD"
+role = "mol_sd"
+gds  = "17/1"
+tier = "top"
+thickness = 20
+note = "上層 tier 的 source/drain 區域互連"
+
+[[layer]]
+name = "GATE"
+role = "gate"
+gds  = "7/0"
+span = ["FIN", "P_LISD"]   # 一根 gate 貫穿上下兩顆元件 —— 不佔自己的高度
+note = "整個架構的關鍵：實體上只有一個 gate stack，穿過兩個 tier"
+
+[[layer]]
+name = "CA"
+role = "via"
+gds  = "14/0"
+thickness = 16
+note = "接觸窗，接到 M0"
+
+[[layer]]
+name = "M0"
+role = "metal"
+gds  = "15/0"
+thickness = 14
+note = "M0，水平，pitch 24"

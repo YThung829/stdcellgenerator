@@ -1,0 +1,336 @@
+# Exported from layers.py by `techspec.py --export`. This is a worked
+# example of the handover format: layers are listed BOTTOM TO TOP and
+# carry a thickness, never an absolute coordinate.
+schema = "stack3d/tech@1"
+name = "QFET"
+order = 2
+summary = "正面 + 背面雙面 (2 tier)"
+
+[geometry]
+summary = "正面 + 背面雙面 (2 tier)"
+placement = "PC1 (正面) / BPC1 (背面)"
+pin_access = "M0 (正面) / BM0 (背面)"
+virtual_edges = "VL1: BPC1↔PC1 (overlap)"
+
+[bind]  # wiring to the engine -- not the process engineer's half
+preset = "QFET_4T_SH"
+layer_json = "PROBE3_QFET_2F_4T_4242OF21.json"
+gds_writer = "gds_QFET_SH"
+gds_argv = ["--result", "{res}", "--layer", "{layer}", "--subckt", "{cell}", "--gds", "{gds}", "--draw-virtual"]
+
+[[layer]]
+name = "BM1"
+role = "metal"
+gds  = "519/0"
+align = "origin"
+offset = -208
+thickness = 14
+group = "backbeol"
+color = "#a855f7"
+note = "backside M1, vertical, pitch 42 offset 21"
+
+[[layer]]
+name = "BV0"
+role = "via"
+gds  = "518/0"
+align = "BM1"
+offset = 14
+thickness = 14
+note = "backside via BM1 -> BM0"
+
+[[layer]]
+name = "BM0"
+role = "metal"
+gds  = "515/0"
+align = "BM1"
+offset = 28
+thickness = 14
+group = "backbeol"
+color = "#60a5fa"
+note = "backside M0, horizontal, pitch 24 - carries the backside power rails and backside pin access"
+
+[[layer]]
+name = "BCA1"
+role = "via"
+gds  = "514/0"
+align = "BM1"
+offset = 42
+thickness = 16
+note = "backside contact BM0 -> BPC1"
+
+[[layer]]
+name = "BLISD1"
+role = "mol_sd"
+gds  = "517/0"
+align = "BM1"
+offset = 58
+thickness = 28
+group = "back"
+color = "#f59e0b"
+note = "backside local interconnect to source/drain, feeding DOWN to BCA1"
+
+[[layer]]
+name = "BPC1"
+role = "gate"
+gds  = "57/0"
+align = "BLISD1"
+thickness = 74
+group = "back"
+color = "#dc2626"
+note = "BACKSIDE gate poly - the 2nd placement tier"
+
+[[layer]]
+name = "GATE_CUT_BACK"
+role = "cut"
+gds  = "510/0"
+align = "BM1"
+offset = 66
+thickness = 22
+note = "backside gate cut"
+
+[[layer]]
+name = "BSDT1"
+role = "sd_trench"
+gds  = "588/0"
+align = "BM1"
+offset = 86
+thickness = 38
+group = "back"
+color = "#d97706"
+note = "backside source/drain trench (epi)"
+
+[[layer]]
+name = "ACTIVE_BACK_P"
+role = "diffusion"
+gds  = "511/1"
+align = "BSDT1"
+thickness = 46
+group = "back"
+color = "#059669"
+note = "backside diffusion, PMOS band (upper Y). Empty when every device lands on the front tier."
+
+[[layer]]
+name = "ACTIVE_BACK_N"
+role = "diffusion"
+gds  = "511/2"
+align = "BSDT1"
+thickness = 46
+group = "back"
+note = "backside diffusion, NMOS band (lower Y). Empty when every device lands on the front tier."
+
+[[layer]]
+name = "FIN_BACK"
+role = "channel"
+gds  = "502/0"
+align = "BM1"
+offset = 90
+thickness = 42
+group = "back"
+color = "#0891b2"
+note = "backside fin grid (hardcoded 502/0 in the writer, not in the layer JSON)"
+
+[[layer]]
+name = "MIV1"
+role = "via"
+gds  = "5000/0"
+align = "BM1"
+offset = 132
+thickness = 17
+group = "miv"
+color = "#f0abfc"
+note = "monolithic inter-tier via BPC1 -> H0"
+
+[[layer]]
+name = "VL1 (virtual)"
+role = "virtual"
+gds  = "700/0"
+align = "MIV1"
+thickness = 76
+note = "GRAPH-ONLY jump BPC1 <-> PC1 (method=overlap). No mask, no geometry - it exists only as an edge in the LayeredGridGraph, and the writer draws it only under --draw-virtual."
+
+[[layer]]
+name = "NSELECT_BACK"
+role = "implant"
+gds  = "512/0"
+align = "BM1"
+offset = 134
+thickness = 3
+note = "backside n-implant mask"
+
+[[layer]]
+name = "PSELECT_BACK"
+role = "implant"
+gds  = "513/0"
+align = "NSELECT_BACK"
+thickness = 3
+color = "#f472b6"
+note = "backside p-implant mask"
+
+[[layer]]
+name = "WELL_BACK"
+role = "substrate"
+gds  = "51/0"
+align = "BM1"
+offset = 139
+thickness = 8
+note = "backside well marker"
+
+[[layer]]
+name = "H0"
+role = "metal"
+gds  = "600/0"
+align = "BM1"
+offset = 149
+thickness = 14
+group = "mid"
+color = "#2dd4bf"
+note = "inter-tier routing layer, horizontal, pitch 24"
+
+[[layer]]
+name = "MIV2"
+role = "via"
+gds  = "5001/0"
+align = "BM1"
+offset = 163
+thickness = 14
+group = "miv"
+color = "#f0abfc"
+note = "MIV H0 -> H1"
+
+[[layer]]
+name = "H1"
+role = "metal"
+gds  = "601/0"
+align = "BM1"
+offset = 177
+thickness = 14
+group = "mid"
+color = "#14b8a6"
+note = "inter-tier routing layer, vertical, pitch 42 offset 21"
+
+[[layer]]
+name = "MIV3"
+role = "via"
+gds  = "5002/0"
+align = "BM1"
+offset = 191
+thickness = 17
+group = "miv"
+color = "#f0abfc"
+note = "MIV H1 -> PC1 (climbs into the front tier)"
+
+[[layer]]
+name = "WELL_FRONT"
+role = "substrate"
+gds  = "1/0"
+align = "BM1"
+offset = 193
+thickness = 8
+note = "frontside well marker"
+
+[[layer]]
+name = "NSELECT_FRONT"
+role = "implant"
+gds  = "12/0"
+align = "BM1"
+offset = 203
+thickness = 5
+note = "frontside n-implant mask"
+
+[[layer]]
+name = "PSELECT_FRONT"
+role = "implant"
+gds  = "13/0"
+align = "NSELECT_FRONT"
+thickness = 5
+color = "#f472b6"
+note = "frontside p-implant mask"
+
+[[layer]]
+name = "FIN_FRONT"
+role = "channel"
+gds  = "2/0"
+thickness = 42
+note = "frontside fin grid (hardcoded 2/0 in the writer)"
+
+[[layer]]
+name = "ACTIVE_FRONT_P"
+role = "diffusion"
+gds  = "11/1"
+align = "FIN_FRONT"
+thickness = 46
+color = "#34d399"
+note = "frontside diffusion, PMOS band (upper Y)"
+
+[[layer]]
+name = "ACTIVE_FRONT_N"
+role = "diffusion"
+gds  = "11/2"
+align = "FIN_FRONT"
+thickness = 46
+note = "frontside diffusion, NMOS band (lower Y)"
+
+[[layer]]
+name = "PC1"
+role = "gate"
+gds  = "7/0"
+align = "FIN_FRONT"
+thickness = 74
+note = "FRONTSIDE gate poly - the 1st placement tier. Runs up to the CA1 plane because QFET has no LIG layer."
+
+[[layer]]
+name = "SDT1"
+role = "sd_trench"
+gds  = "88/0"
+align = "BM1"
+offset = 216
+thickness = 38
+note = "frontside source/drain trench (epi)"
+
+[[layer]]
+name = "GATE_CUT_FRONT"
+role = "cut"
+gds  = "10/0"
+align = "BM1"
+offset = 252
+thickness = 22
+note = "frontside gate cut"
+
+[[layer]]
+name = "LISD1"
+role = "mol_sd"
+gds  = "17/0"
+align = "BM1"
+offset = 254
+thickness = 28
+note = "frontside local interconnect to source/drain, feeding UP to CA1"
+
+[[layer]]
+name = "CA1"
+role = "via"
+gds  = "14/0"
+thickness = 16
+note = "contact PC1 -> M0"
+
+[[layer]]
+name = "M0"
+role = "metal"
+gds  = "15/0"
+thickness = 14
+note = "M0, horizontal, pitch 24"
+
+[[layer]]
+name = "V0"
+role = "via"
+gds  = "18/0"
+thickness = 14
+note = "via M0 -> M1"
+
+[[layer]]
+name = "M1"
+role = "metal"
+gds  = "19/0"
+thickness = 14
+color = "#8b5cf6"
+note = "M1, vertical, pitch 42 offset 21"
+

@@ -1,0 +1,152 @@
+# Exported from layers.py by `techspec.py --export`. This is a worked
+# example of the handover format: layers are listed BOTTOM TO TOP and
+# carry a thickness, never an absolute coordinate.
+schema = "stack3d/tech@1"
+name = "FinFET"
+order = 0
+summary = "單層平面 (1 tier)"
+
+[geometry]
+summary = "單層平面 (1 tier)"
+placement = "PC"
+pin_access = "M0"
+virtual_edges = "無"
+
+[bind]  # wiring to the engine -- not the process engineer's half
+preset = "FinFET_4T_SH"
+layer_json = "PROBE3_FinFET_2F_4T_4530OF0.json"
+gds_writer = "gds_FinFET_SH"
+gds_argv = ["--result_file", "{res}", "--subckt_name", "{cell}", "--layer", "{layer}", "--gds_file", "{gds}"]
+
+[[layer]]
+name = "WELL"
+role = "substrate"
+gds  = "1/0"
+align = "origin"
+offset = -28
+thickness = 24
+note = "n-well / bulk marker"
+
+[[layer]]
+name = "NSELECT"
+role = "implant"
+gds  = "12/0"
+align = "WELL"
+offset = 22
+thickness = 6
+note = "n-implant mask"
+
+[[layer]]
+name = "PSELECT"
+role = "implant"
+gds  = "13/0"
+align = "NSELECT"
+thickness = 6
+color = "#f472b6"
+note = "p-implant mask"
+
+[[layer]]
+name = "FIN"
+role = "channel"
+gds  = "2/0"
+thickness = 42
+note = "fin channel grid (5 fins, pitch 18 / width 6)"
+
+[[layer]]
+name = "ACTIVE"
+role = "diffusion"
+gds  = "11/0"
+align = "FIN"
+thickness = 46
+alpha = 0.86
+note = "diffusion (OD): PMOS band on top, NMOS below"
+
+[[layer]]
+name = "PC / GATE"
+role = "gate"
+gds  = "7/0"
+align = "FIN"
+thickness = 62
+alpha = 0.42
+note = "poly gate bar at every CPP (45nm)"
+
+[[layer]]
+name = "SDT"
+role = "sd_trench"
+gds  = "88/0"
+align = "WELL"
+offset = 36
+thickness = 38
+note = "source/drain trench (epi)"
+
+[[layer]]
+name = "GATE_CUT"
+role = "cut"
+gds  = "10/0"
+align = "WELL"
+offset = 72
+thickness = 22
+note = "gate cut between P and N gate nets"
+
+[[layer]]
+name = "LISD"
+role = "mol_sd"
+gds  = "17/0"
+align = "WELL"
+offset = 74
+thickness = 28
+note = "local interconnect to source/drain"
+
+[[layer]]
+name = "LIG"
+role = "mol_gate"
+gds  = "16/0"
+align = "WELL"
+offset = 90
+thickness = 12
+note = "local interconnect to gate"
+
+[[layer]]
+name = "CA"
+role = "via"
+gds  = "14/0"
+thickness = 16
+note = "contact via PC -> M0"
+
+[[layer]]
+name = "M0"
+role = "metal"
+gds  = "15/0"
+thickness = 14
+note = "M0, horizontal, pitch 24 (also the M0BPR power rails)"
+
+[[layer]]
+name = "V0"
+role = "via"
+gds  = "18/0"
+thickness = 14
+note = "via M0 -> M1"
+
+[[layer]]
+name = "M1"
+role = "metal"
+gds  = "19/0"
+thickness = 14
+color = "#8b5cf6"
+note = "M1, vertical, pitch 30"
+
+[[layer]]
+name = "V1"
+role = "via"
+gds  = "21/0"
+thickness = 14
+note = "via M1 -> M2"
+
+[[layer]]
+name = "M2"
+role = "metal"
+gds  = "20/0"
+thickness = 14
+color = "#ec4899"
+note = "M2, horizontal, pitch 24"
+

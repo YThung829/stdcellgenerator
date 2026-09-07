@@ -268,8 +268,42 @@ def build_payload(ctx, techs_wanted: list) -> dict:
     return {"techs": techs, "meta": meta, "alpha": alpha}
 
 
-def assemble(payload: dict, out_path: Path) -> None:
+VENDOR_THREE = HERE / "vendor" / "three.min.js"
+CDN_THREE = ("https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/"
+             "three.min.js")
+
+
+def inline_three(head: str) -> str:
+    """Replace the cdnjs <script src> with the vendored library, inlined.
+
+    The page has to open on a machine with no network at all, so the library
+    ships inside the HTML rather than beside it -- one file to copy, nothing
+    to resolve at load time. Keeps the upstream @license banner intact (MIT;
+    full text in vendor/LICENSE.three).
+    """
+    if not VENDOR_THREE.is_file():
+        raise SystemExit(
+            f"missing {VENDOR_THREE}.\n"
+            f"  -> see vendor/README.md for how to fetch it, or pass --cdn to\n"
+            f"     build a page that loads three.js from cdnjs instead."
+        )
+    lib = VENDOR_THREE.read_text(encoding="utf-8")
+    assert "</script" not in lib.lower(), "vendored library closes the tag"
+    tag = f'<script src="{CDN_THREE}"></script>'
+    if tag not in head:
+        raise SystemExit("head.html no longer carries the expected three.js "
+                         "<script> tag; inlining would silently no-op.")
+    return head.replace(
+        tag,
+        "<!-- three.js r128 (MIT) inlined from vendor/three.min.js so the page\n"
+        "     opens with no network access. License: vendor/LICENSE.three -->\n"
+        f"<script>{lib}</script>")
+
+
+def assemble(payload: dict, out_path: Path, offline: bool = True) -> None:
     head = (HERE / "template" / "head.html").read_text(encoding="utf-8")
+    if offline:
+        head = inline_three(head)
     body = (HERE / "template" / "body.html").read_text(encoding="utf-8")
     app = (HERE / "template" / "app.js").read_text(encoding="utf-8")
 
@@ -299,7 +333,8 @@ def assemble(payload: dict, out_path: Path) -> None:
     )
     out_path.write_text(page, encoding="utf-8")
     rel = out_path.relative_to(REPO) if out_path.is_relative_to(REPO) else out_path
-    print(f"  wrote {rel} ({len(page.encode()):,} bytes)")
+    how = "three.js inlined, no network needed" if offline else "three.js from cdnjs"
+    print(f"  wrote {rel} ({len(page.encode()):,} bytes; {how})")
 
 
 def main() -> None:
@@ -316,6 +351,9 @@ def main() -> None:
                     help=f"engine checkout root (default {DEFAULT_ENGINE})")
     ap.add_argument("--cell", default=DEFAULT_CELL,
                     help=f"cell to render (default {DEFAULT_CELL})")
+    ap.add_argument("--cdn", action="store_true",
+                    help="load three.js from cdnjs instead of inlining the "
+                         "vendored copy (smaller file, needs network)")
     ap.add_argument("--out", default=str(HERE / "smtcell-stack.html"), type=Path)
     ap.add_argument("--payload", default=str(HERE / "data" / "stack3d.json"), type=Path,
                     help="also write the payload JSON here")
@@ -347,7 +385,7 @@ def main() -> None:
     Path(args.payload).write_text(
         json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
         encoding="utf-8")
-    assemble(payload, Path(args.out))
+    assemble(payload, Path(args.out), offline=not args.cdn)
 
 
 if __name__ == "__main__":

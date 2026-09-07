@@ -3,7 +3,7 @@
 一個獨立的教學用工具：把 engine 實際解出來的 cell layout 拆成 3D 堆疊，用來看懂
 **FinFET / CFET / QFET** 三種架構在 z 軸上到底差在哪。
 
-輸出是一個單檔 HTML（`smtcell-stack.html`），可以直接用瀏覽器開，或發布成 artifact。
+輸出是一個單檔 HTML（`smtcell-stack.html`），**不需要網路**，直接用瀏覽器開即可。
 
 ```
 engine/input/layer/*.json  ─┐
@@ -162,8 +162,26 @@ python tools/stack3d/gdstext.py verify out.gds data/solved/cfet/INV_X1.gdstxt   
 `.gds` 本身被 `.gitignore` 排除（是建構產物）。`build.py --gds` 重產 GDS 後會
 自動重新編碼 `.gdstxt`，兩者不會走鐘。
 
-頁面本身在執行期從 cdnjs 載 three.js r128（UMD），字型從 Google Fonts 載。
-離線看的話把那兩個 `<link>` / `<script>` 換成本地檔即可。
+### 完全離線可用
+
+建出來的 `smtcell-stack.html` **不需要任何網路**。three.js r128（MIT）由
+`build.py` 從 `vendor/three.min.js` 直接內嵌進 HTML —— 一個檔案帶著走，載入時
+不用解析任何外部資源。授權全文在 `vendor/LICENSE.three`。
+
+字型沒有 vendor（CJK 字族好幾 MB，不值得）。`head.html` 保留 Google Fonts 的
+`<link>`，有網路時會用；沒網路時瀏覽器靜靜忽略它，改用 fallback 裡點名的系統
+中文字型（PingFang TC / Microsoft JhengHei / Noto Sans CJK TC），中文照樣正常
+顯示，只是字體換成系統的。
+
+已用 headless Chromium **封鎖全部非 file:// 請求**實測過：3D 正常渲染、
+`THREE` 正常載入、中文正常顯示，唯一被擋的請求是那支字型 stylesheet。
+
+要產生走 CDN 的小檔版本（給有網路的場合）：
+
+```bash
+python tools/stack3d/build.py --cdn      # 約 68 KB，需要 cdnjs
+python tools/stack3d/build.py            # 約 674 KB，完全離線（預設）
+```
 
 ## 檔案
 
@@ -180,7 +198,8 @@ python tools/stack3d/gdstext.py verify out.gds data/solved/cfet/INV_X1.gdstxt   
 | `template/app.js` | three.js 場景、圖層側欄、互動 |
 | `data/solved/<tech>/` | 已 commit 的 `.res` / `.gdstxt`（純文字），讓重建不必重解也不必裝套件 |
 | `data/stack3d.json` | 產生出來的 payload（內嵌進 HTML，這裡另存一份方便 diff） |
-| `smtcell-stack.html` | 建好的單檔頁面 |
+| `vendor/` | three.js r128（MIT）+ 授權；`build.py` 會把它內嵌進頁面 |
+| `smtcell-stack.html` | 建好的單檔頁面，**完全離線可用** |
 
 ## 哪裡是真的、哪裡是補的
 

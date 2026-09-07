@@ -1,0 +1,199 @@
+<header class="topbar">
+  <div class="brand">
+    <b>SMTCell 製程立體剖析</b>
+    <span>INV_X1 · 4-track SH</span>
+  </div>
+  <div class="cellchip">實際跑出來的解 · <b id="chip-obj">—</b></div>
+  <div class="seg" role="group" aria-label="選擇製程架構">
+    <button type="button" data-tech="FinFET" aria-pressed="false">FinFET</button>
+    <button type="button" data-tech="CFET" aria-pressed="true">CFET</button>
+    <button type="button" data-tech="QFET" aria-pressed="false">QFET</button>
+  </div>
+</header>
+
+<dl class="specs" id="specs"></dl>
+
+<div class="viewer">
+  <aside class="rail">
+    <div class="rail-head">
+      <h2>Layer Stack</h2>
+      <p>由上而下就是這顆 cell 的剖面。點一列開關該層，z 值為示意厚度。</p>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="rail-list" id="rail"></div>
+  </aside>
+  <div class="stage">
+    <canvas id="gl"></canvas>
+    <div class="axes"><b>X</b> cell 寬 (CPP 方向)<br><b>Y</b> 堆疊高度 z<br><b>Z</b> cell 高 (track 方向)</div>
+    <div id="tip" role="status"></div>
+    <div class="hud">
+      <label for="ex">分層展開</label>
+      <input id="ex" type="range" min="0" max="100" value="22" aria-label="分層展開程度">
+      <span class="val" id="exv">0.22</span>
+      <button type="button" id="btn-reset">重設視角</button>
+      <button type="button" id="btn-all">全部開啟</button>
+      <span class="hint">拖曳旋轉 · 滾輪縮放 · 右鍵平移</span>
+    </div>
+  </div>
+</div>
+
+<main class="doc">
+
+<section class="blk">
+  <p class="eyebrow">Where the geometry comes from</p>
+  <h2>上面每一塊多邊形，都是這個 repo 真的解出來的</h2>
+  <p class="lede">我在這個容器裡對三個 preset 各跑了一次 <code>INV_X1</code>，把產生的 GDS 用 KLayout 讀回來、抽出每一個 polygon，再依製程堆疊順序給它一個 z 區間畫成立體圖。所以形狀是真的，厚度是示意的 — 原因見最後一段。</p>
+  <div class="pipe">
+    <div><span class="k">Netlist</span><span class="f">input/cdl/PROBE_2F4T.cdl</span><span class="d">.SUBCKT INV_X1 I VDD VSS ZN</span></div>
+    <div><span class="k">Layer stack</span><span class="f">input/layer/PROBE3_*.json</span><span class="d">每層的 direction / pitch / offset / width</span></div>
+    <div><span class="k">Solve</span><span class="f">src.cellgen.run</span><span class="d">CP-SAT 同時做 placement + routing</span></div>
+    <div><span class="k">Result</span><span class="f">result/INV_X1.res</span><span class="d">純文字：放置表 + 繞線線段表</span></div>
+    <div><span class="k">GDS</span><span class="f">postprocess/gds_*_SH.py</span><span class="d">把 .res 翻成 KLayout 的 Box</span></div>
+  </div>
+  <p>三次解的結果分別是 FinFET <code>obj=1021</code>、CFET <code>obj=1034</code>、QFET <code>obj=999</code>，都是 2 顆電晶體、<code>COL=2</code>。FinFET / CFET 的 CPP 是 45nm 所以 cell 寬 90nm；QFET 的 preset 用 CPP 42，所以只有 84nm。cell 高都是 144nm（4 track × M0 pitch 24 × ... 見下）。</p>
+</section>
+
+<section class="blk">
+  <p class="eyebrow">Three architectures</p>
+  <h2>三種架構差在哪：放置層的數量與位置</h2>
+  <p class="lede">程式裡三個架構共用同一套 core（graph / placement / routing / rule），差別幾乎全部集中在「有幾個 placement layer、它們在 z 軸的哪裡、彼此之間怎麼連」。</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>面向</th><th>FinFET</th><th>CFET</th><th>QFET</th></tr></thead>
+    <tbody>
+      <tr><th>幾何本質</th><td>單層平面：P/N 左右分列在同一平面的上下兩個 row band</td><td>2 層垂直堆疊：一顆元件直接壓在另一顆上面，共用同一個 column footprint</td><td>正面 + 背面兩個 tier，中間夾一組層間繞線</td></tr>
+      <tr><th><code>placement_layer_names</code></th><td><span class="mono">{PC}</span></td><td><span class="mono">{PC, BPC}</span></td><td><span class="mono">{PC1, BPC1}</span></td></tr>
+      <tr><th><code>pin_access_layer_names</code></th><td><span class="mono">{M0}</span></td><td><span class="mono">{BPC, M0}</span></td><td><span class="mono">{BM0, M0}</span></td></tr>
+      <tr><th>P / N 怎麼分</th><td>靠 row：NMOS 放 row 0、PMOS 放 row 2</td><td>靠 tier：<code>stacking_config</code> = <span class="mono">P_on_N</span> 或 <span class="mono">N_on_P</span>，決定誰在 PC 誰在 BPC</td><td>靠 row（同 FinFET），tier 由 solver 自己選 <span class="mono">z_var</span></td></tr>
+      <tr><th>LGG z 順序<br><span class="ref">(metal_layers 依 layer_number 排序)</span></th><td class="mono">PC · M0 · M1 · M2</td><td class="mono">BPC · PC · M0 · M1 · M2</td><td class="mono">BM1 · BM0 · BPC1 · H0 · H1 · PC1 · M0 · M1</td></tr>
+      <tr><th>虛擬邊 (virtual edge)</th><td>無</td><td><span class="mono">("BPC","M0")</span>，method <span class="mono">boundary</span>，寫死在 <code>_init_graph</code></td><td><span class="mono">VL1: BPC1↔PC1</span>，method <span class="mono">overlap</span>，由 layer JSON 的 <span class="mono">"layer_type":"virtual"</span> 宣告</td></tr>
+      <tr><th>MOL 當繞線資源</th><td>可選（<code>lig_routing</code> / <code>lisd_routing</code> 預設 false）</td><td>強制開啟 — <code>config.py</code> 看到 <span class="mono">tech=="CFET"</span> 就把兩個 flag 設 true</td><td>由 preset 的 <code>CONFIG_OVERRIDES</code> 打開</td></tr>
+      <tr><th>preset</th><td class="mono">FinFET_4T_SH.mk<br>CPP 45 / M1P 30 / OF 0</td><td class="mono">CFET_4T_SH.mk<br>CPP 45 / M1P 30 / OF 0</td><td class="mono">QFET_4T_SH.mk<br>CPP 42 / M1P 42 / OF 21</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">
+    <p><b>看 CFET 立體圖時注意這件事：</b>把上面的 viewer 切到 CFET，會發現 <code>N_ACTIVE</code>(11/2) 和 <code>P_ACTIVE</code>(11/1) 的 x/y 邊界一模一樣 — 都是 <span class="mono">x[15.5, 74.5] y[19, 125]</span>。這不是畫錯，這正是 CFET：兩顆元件佔用同一塊平面面積，只差在 z。GDS 是平面格式，它只能用 datatype（<span class="mono">/1</span> vs <span class="mono">/2</span>）來區分上下 tier，所以在 2D layout viewer 裡兩層是完全疊死的 — 立體圖才把這個差別攤開。</p>
+  </div>
+  <p>同理，CFET 的 gate 在 GDS 裡只有一根 <span class="mono">7/0</span> 的柱子貫穿整個 cell 高度：實體上 CFET 的 gate stack 本來就穿過上下兩顆元件，所以 writer 不需要（也不能）畫成兩根。我在立體圖裡把它的 z 區間設成 <span class="mono">0 → 150</span> 橫跨兩個 tier，就是要凸顯這件事。</p>
+</section>
+
+<section class="blk">
+  <p class="eyebrow">Routing space</p>
+  <h2>繞線空間是怎麼 initialize 出來的</h2>
+  <p class="lede">整個 solver 看到的世界就是一張 <code>LayeredGridGraph</code>（<span class="ref">core/graph.py</span>）。節點是 <span class="mono">(layer_idx, row, col)</span>，邊是「同層可以走的一步」或「跨層的一個 via」。三個架構的 <code>_init_graph()</code> 做的事情就是算出每一層有哪些 row / col，然後把這張圖建出來。</p>
+
+  <ol class="steps">
+    <li>
+      <h3>讀 layer JSON → <code>LayerStack</code></h3>
+      <p><span class="ref">core/entity.py:864</span> 把 JSON 依 <code>layer_type</code> 拆成四類：<code>metal</code>（有 direction/pitch/offset/width，會進 graph）、<code>via</code>（只記 lower/upper，決定哪兩層相鄰）、<code>virtual</code>（純圖上的捷徑，沒有實體）、<code>gds</code>（solver 完全看不到，只給 GDS writer 用，例如 ACTIVE / WELL / FIN / SELECT）。</p>
+      <p>metal 依 <code>layer_number</code> 由小到大排序，排完的 index 就是 <b>LGG 的 z-index</b>。QFET 的 <code>.res</code> 裡繞線線段寫 <span class="mono">MET 5 / 6 / 7</span>，對照 stack 就是 <span class="mono">PC1 / M0 / M1</span> — 這個對應關係是自動長出來的，不是寫死的。</p>
+    </li>
+    <li>
+      <h3>算 canvas 大小</h3>
+      <pre><b>canvas_width</b>  = num_col      × <i>placement layer 的 pitch</i>
+<b>canvas_height</b> = num_rt_track × <i>M0 的 pitch</i> × 2</pre>
+      <p>QFET 這裡有一段值得看的註解（<span class="ref">QFET/main.py:_compute_canvas_dimensions</span>）：FinFET / CFET 都直接用 <code>metal_layers[0].pitch</code>，因為它們的第 0 層剛好就是 placement layer（PC / BPC）。但 QFET 的第 0 層是 <b>BM1</b>（背面金屬），用它會讓 canvas 窄掉 2/3、最後一個合法 column 被 <code>[:-1]</code> 砍掉。所以 QFET 改成明確去問 <code>get_pitch(default_placement_layer)</code>。這是三份 <code>_init_graph</code> 唯一一個「不能照抄」的地方。</p>
+    </li>
+    <li>
+      <h3>倍解析度座標系（half-pitch convention）</h3>
+      <p>這是整份程式最容易看不懂的一招。Gate 落在整數 column 上，source/drain 落在兩個 gate 中間的半格上。為了讓兩者都是整數，模型把整個座標空間 <b>放大兩倍</b>：</p>
+      <pre>placement layer : pitch 保持原值      <i>(本來就是半格解析度)</i>
+其他所有 layer  : pitch × 2         <i>(對齊到 placement 格點)</i>
+offset          : × 2               <i>(FinFET / QFET；CFET 沒有乘)</i></pre>
+      <p>下游要還原成實體 nm 時就除以 2 — 這就是三個 GDS writer 開頭都有的 <code>SOLVER_RESCALE = 2.0</code>。</p>
+      <p>由此得到 column 的奇偶約定：<b>偶數 index = gate 欄，奇數 index = source/drain 欄</b>。<code>_init_domain()</code> 就是靠 <code>col_indices_in_layer(layer, parity="even"/"odd")</code> 把 CP-SAT 的 domain 切出來。</p>
+      <figure id="fig-grid"></figure>
+    </li>
+    <li>
+      <h3>每層要有哪些 row / col</h3>
+      <p>規則很單純：<b>V 方向的層貢獻 columns，H 方向的層貢獻 rows</b>。缺的那一軸由 <code>LayeredGridGraph._infer_from_nearest()</code> 從 z 軸上最近、有該資料的層合併過來（不限相鄰 ±1，因為 QFET 有連續好幾層都是 V 方向）。</p>
+      <p>CFET 在這裡加了一個很省的手腳（<span class="ref">CFET/main.py:_init_graph</span>）：上層 placement layer（PC）拿到<b>全部</b> M0 rows，下層（BPC）只拿 <b>頭尾兩個 boundary rows</b>。中間的 row 對下層元件既沒有 pin 也接不到 via，留著只會讓模型變大。</p>
+    </li>
+    <li>
+      <h3>建圖：節點、同層邊、via 邊</h3>
+      <pre><b>節點</b>   每層 product(rows, cols) 各一個 (z, r, c)
+<b>同層邊</b> direction=="H" → 只連左右鄰 col
+         direction=="V" → 只連上下鄰 row
+<b>via 邊</b> 連到 z±1，<u>但前提是同一個 (r, c) 在那一層也存在</u></pre>
+      <p>最後這個條件就是 pitch 對齊在做的事：兩層的格點如果對不上，它們之間就長不出 via 邊。QFET 的 M1 用 <span class="mono">pitch 42 / offset 21</span> 而 M0 用 <span class="mono">pitch 24</span>，能不能打 via 完全由這個交集決定。</p>
+    </li>
+    <li>
+      <h3>虛擬邊（virtual edge）：跳過中間層的捷徑</h3>
+      <p>當兩層在 z 上不相鄰、但實體上想讓它們直接通，就用 virtual edge。<code>_build_graph</code> 提供五種產生方式：</p>
+      <ul>
+        <li><code>overlap</code> — 只連 (r,c) 完全重疊的節點。QFET 的 <span class="mono">VL1 (BPC1↔PC1)</span> 用這個。</li>
+        <li><code>colwise</code> — 同一個 column 上，下層每個 row 連上層每個 row。</li>
+        <li><code>sdcolwise</code> — 同上，但只限下層的 <b>奇數（S/D）</b> column。</li>
+        <li><code>overlapGate</code> — 只限指定的 gate columns（可再限 rows）。</li>
+        <li><code>boundary</code> — 只連每個 column 的頭尾兩個共同 row。CFET 的 <span class="mono">BPC↔M0</span> 用這個，正好對應上一步只留 boundary rows 的決定。</li>
+      </ul>
+      <p>虛擬邊在 viewer 裡可以打開來看：切到 QFET、把 <span class="mono">VL1 (virtual)</span> 那列點亮，會看到一排黃色柱子從 BPC1 頂端貫穿到 PC1。<b>那些柱子在真實製程裡不存在</b> — 沒有光罩、沒有幾何，它只是圖上的一條邊，走它要付 <code>virtual_edge_cost</code>（預設 5，比 metal 的 1 和 via 的 3 貴）。GDS 只有加 <code>--draw-virtual</code> 才會把它畫在 debug layer 700 上。</p>
+    </li>
+  </ol>
+
+  <div class="note">
+    <p><b>把 graph 建好之後才是約束。</b><code>layer_to_kind</code>（<span class="ref">tech.py 的 property</span>）把每一層標成 <span class="mono">PLACE</span> 或 <span class="mono">ROUTE</span>，<code>core/routing.py</code> 裡兩千多行的約束就靠這個分流：哪些層可以放電晶體、哪些層的邊要在 diffusion break 的 column 上被禁掉、哪些層算 M2 使用量上限。</p>
+  </div>
+</section>
+
+<section class="blk">
+  <p class="eyebrow">Solve → GDS</p>
+  <h2>GDS 是怎麼畫出來的</h2>
+  <p class="lede">solver 解完不會直接吐 GDS。中間隔了一個純文字的 <code>.res</code>，這讓 GDS writer 完全不必碰 CP-SAT。</p>
+
+  <h3>第一步：把解寫成 .res</h3>
+  <p><code>write_finfet_result</code> / <code>write_cfet_result</code> / <code>write_qfet_result</code>（各自的 <code>util.py</code>）把 solver 的變數值讀出來，做兩件事：把每顆電晶體的 <span class="mono">x / y / (z) / flip / S,D,G 的 column</span> 印成一張表；把所有 <span class="mono">edge_vars == 1</span> 的邊收集起來，用 <code>_merge_collinear_edges()</code> 把同層同 net 的共線邊串成一條長線段，再印成第二張表。</p>
+  <p>三個 tech 的表頭差異剛好是架構差異的縮影：</p>
+  <pre>FinFET  Name  X  Y      Flip  Width Height  SrcCol ...
+CFET    Name  X  Y      Flip  Width Height  <u>SrcRow</u> SrcCol ...
+QFET    Name  X  Y  <u>Z</u>  Flip  Width Height  SrcCol ...</pre>
+  <p>QFET 多的那個 <code>Z</code> 直接就是 placement tier 的名字（<span class="mono">PC1</span> 或 <span class="mono">BPC1</span>），從 <code>lgg.idx_to_layer[z_idx]</code> 查來的。我跑的這顆 INV_X1，兩顆電晶體都被放到 <span class="mono">PC1</span>（正面）— 反相器太小，solver 沒有理由動用背面 tier。</p>
+
+  <h3>第二步：.res → KLayout</h3>
+  <p>三個 writer 都是同一套骨架：<code>_parse_result()</code> 用正規表示式把兩張表讀回 NamedTuple，<code>draw()</code> 建立所有 layer index，然後依序畫 boundary → well/select → gate → fin → active/LISD → routing。</p>
+  <p>幾何全部靠幾個常數換算回 nm：</p>
+  <pre><b>SOLVER_RESCALE = 2.0</b>   <i>倍解析度座標 ÷ 2 = 實體 nm</i>
+<b>_ROUTE_X_OFFSET = -7</b>   <i>via / wire 錨在 landing via 的左下角</i>
+<b>_ROUTE_Y_OFFSET = +29</b>
+<b>_VIA_SIZE = 14</b>         <i>每個跨層落點都是 14×14 的接觸方塊</i></pre>
+  <p>一條同層線段的盒子（<span class="ref">gds_QFET_SH.py:_wire_box</span>）：走向那一軸從起點的 via 涵蓋到終點的 via，垂直那一軸用該層自己的 <code>width</code> 對齊 via 中心，再各往外加 <code>horizontal_enclosure</code> / <code>vertical_enclosure</code> — 這兩個值是從 layer JSON 讀的（H 層 3/0、V 層 0.5/5），不是寫死的。</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>writer</th><th>SCALE</th><th>dbu</th><th>1 writer 單位</th><th>layer number 來源</th></tr></thead>
+    <tbody>
+      <tr><th>gds_FinFET_SH.py</th><td class="mono">4</td><td class="mono">0.00025</td><td class="mono">= 1 nm</td><td>寫死 <code>self.layout.layer(15, 0)</code> 這種呼叫</td></tr>
+      <tr><th>gds_CFET_SH.py</th><td class="mono">10</td><td class="mono">0.0001</td><td class="mono">= 1 nm</td><td>同上，另加 <span class="mono">6/0 = BPC</span>、<span class="mono">7/1 = PC</span></td></tr>
+      <tr><th>gds_QFET_SH.py</th><td class="mono">4</td><td class="mono">0.00025</td><td class="mono">= 1 nm</td><td><b>讀 layer JSON 的 <code>gds_layer</code> / <code>gds_datatype</code></b></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>SCALE 和 dbu 的組合不同但乘出來一樣（<span class="mono">4×0.00025 = 10×0.0001 = 0.001µm</span>），所以三份 GDS 的絕對尺寸是一致的 — 我把三個檔案讀進來換算後 cell 邊界都落在同一個 nm 空間，上面的立體圖才能直接並排比較。</p>
+  <p>最大的結構差異是最後一欄：QFET writer 已經把 GDS layer number 外部化到 layer JSON 了，FinFET / CFET 還是在 <code>draw()</code> 裡一行一行寫死。要換 PDK 的話，QFET 只要改 JSON，另外兩個得改程式。</p>
+</section>
+
+<section class="blk">
+  <p class="eyebrow">Honest caveats</p>
+  <h2>這張立體圖哪裡是真的、哪裡是我補的</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th></th><th>來源</th></tr></thead>
+    <tbody>
+      <tr><th>多邊形的 x / y 邊界</th><td><b>完全真實</b> — 直接從三個 <code>INV_X1.gds</code> 用 KLayout API 抽出來，只做 dbu → nm 的換算。</td></tr>
+      <tr><th>層與層的先後順序</th><td><b>真實</b> — 依 layer JSON 的 <code>layer_number</code>（即 LayerStack 排序後的 metal 順序）以及 via 的 <code>lower_layer → upper_layer</code> 鏈。</td></tr>
+      <tr><th>每層的 z 起點與厚度</th><td><b>示意值，是我設的。</b>layer JSON 裡完全沒有厚度資訊 — 它只描述平面上的 direction / pitch / offset / width。整個 SMTCell 是 2D 的：solver 的「層」是圖的 z-index，GDS 是平面格式。所以厚度必須由外部補，我按一般 4-track 先進製程的相對比例給值，只保證<b>順序</b>與<b>誰跨越誰</b>正確。</td></tr>
+      <tr><th>QFET 背面元件層是空的</th><td><b>真實結果</b> — 這顆 INV_X1 兩顆電晶體都落在正面 <span class="mono">PC1</span>。<span class="mono">ACTIVE_BACK_*</span> / <span class="mono">BSDT1</span> / <span class="mono">BLISD1</span> 沒有幾何，所以列在側欄但是空的（灰字斜體）。背面的 fin grid 和 <span class="mono">BM0</span> 電源軌有畫，因為 writer 不管有沒有元件都會鋪。</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p>資料來源：本 repo 於 <span class="mono">engine/</span> 目錄實跑 <span class="mono">src.cellgen.run</span> 三次（preset FinFET_4T_SH / CFET_4T_SH / QFET_4T_SH，cell INV_X1），再各跑一次對應的 <span class="mono">src.cellgen.postprocess.gds_*_SH</span>，最後用 KLayout Python API 把 GDS 的 polygon 全部 dump 成 JSON 內嵌進本頁。</p>
+  <p>SMTCell 2.0 — UCSD VLSI Lab (Prof. Chung-Kuan Cheng)。QFET 在此 repo 中是 3D FinFET 的代稱。</p>
+</footer>

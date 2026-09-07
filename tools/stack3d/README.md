@@ -57,6 +57,7 @@ python tools/stack3d/build.py --solve --gds
 | `build.py` | 主流程：（可選）重解 → （可選）重產 GDS → 組 payload → 組 HTML |
 | `layers.py` | **z 模型**：每個 tech 的層堆疊表、顏色、群組、透明度 |
 | `dump_gds.py` | 讀 GDS，把每個 shape 依 `(layer, datatype)` dump 成 nm 座標 |
+| `inspect_tech.py` | 幫你把一個架構的事實挖出來：LGG z 順序、via 鏈、虛擬邊、GDS-only 層、writer 用到的 layer/datatype、以及跟 `layers.py` 的涵蓋率 diff |
 | `template/head.html` | `<title>` + 全部 CSS |
 | `template/body.html` | 頁面骨架與說明文字 |
 | `template/app.js` | three.js 場景、圖層側欄、互動 |
@@ -82,16 +83,42 @@ python tools/stack3d/build.py --solve --gds
 | `gds_CFET_SH.py` | 10 | 0.0001 | 0.001 µm |
 | `gds_QFET_SH.py` | 4 | 0.00025 | 0.001 µm |
 
-## 換一顆 cell 或換一個 tech
+## 可移植性
 
-`build.py` 頂端的 `CELL = "INV_X1"` 決定要畫哪顆。換 cell 的話：
+engine 位置和 cell 名稱都沒有寫死，所以這個工具可以搬到 engine 在別處的 fork：
 
 ```bash
-python tools/stack3d/build.py --solve --gds   # 改完 CELL 之後
+python tools/stack3d/build.py --engine /path/to/engine --cell NAND2_X1
+# 或用環境變數
+export STACK3D_ENGINE=/path/to/engine
+export STACK3D_CELL=NAND2_X1
 ```
 
-要加新的 tech，在 `layers.py` 的 `TECHS` 加一筆（指向 preset 名稱、layer JSON、
-GDS writer module 名），再補一張堆疊表，`TECH_ORDER` 加上它即可。`build.py` 不必動。
+`--tech NAME` 可以只重建單一架構（onboard 新架構時迭代很有用）。
+
+## 加一個新的製程架構
+
+有一個 skill 專門帶這件事：`.claude/skills/stack3d-onboard-tech/`。
+跟 agent 說「把 <架構名> 加到 stack3d」它就會走完整流程。手動的話：
+
+```bash
+# 1) 把事實挖出來（LGG z 順序、via 鏈、writer 用到哪些 layer/datatype）
+python tools/stack3d/inspect_tech.py --name MYCFET
+
+# 2) 在 layers.py 加一張堆疊表 + 一筆 TECHS，然後解一顆小 cell
+python tools/stack3d/build.py --tech MYCFET --solve --gds
+
+# 3) 拿實際產出的 GDS 對一次涵蓋率，補完 z 值
+python tools/stack3d/inspect_tech.py --name MYCFET --gds data/solved/mycfet/INV_X1.gds
+
+# 4) 重建並實際打開來看
+python tools/stack3d/build.py
+```
+
+`build.py` 完全不用改 —— 如果你發現自己在改它，多半是找錯擴充點了。
+它也會在有幾何、但 `layers.py` 沒有列到的層出現時警告你（那是最容易做出誤導圖的失誤）。
+
+`layers.py` 的 `TECHS` 每筆欄位的意義寫在該檔案的註解裡。
 
 ## 已知限制
 

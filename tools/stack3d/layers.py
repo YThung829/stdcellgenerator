@@ -123,7 +123,25 @@ QFET = [
 ]
 
 # --------------------------------------------------------------------------
-# Per-technology wiring. `preset` and `layer_json` point into engine/input/,
+# Per-technology wiring. Adding an architecture means adding one entry here
+# plus a stack table above -- build.py needs no changes.
+#
+#   stack        list of stack rows (above)
+#   run          subdirectory name under data/solved/
+#   preset       <engine>/input/presets/<preset>.mk
+#   layer_json   <engine>/input/layer/<layer_json>
+#   gds_writer   module under src.cellgen.postprocess
+#   gds_argv     argv template for that writer; {res} {gds} {cell} {layer}
+#                are substituted. Flag names differ between writers, which is
+#                why each tech spells its own out.
+#   arch/placement/pin_access/virtual
+#                spec-strip text. These live in the tech classes as Python
+#                defaults (archit/*/tech.py), not in any data file, so unlike
+#                CPP / cell size / LGG order they cannot be read back.
+#   boundary_key optional, default "100/0" -- the cell outline layer.
+#   ignore_keys  optional -- keys with geometry that are deliberately NOT
+#                drawn. Anything else with geometry and no stack row makes
+#                build.py print a warning rather than silently vanish. `preset` and `layer_json` point into engine/input/,
 # so build.py reads CPP / M1P / OF and the LGG layer order from the real files
 # instead of repeating them here.
 #
@@ -137,6 +155,8 @@ TECHS = {
         "preset": "FinFET_4T_SH",
         "layer_json": "PROBE3_FinFET_2F_4T_4530OF0.json",
         "gds_writer": "gds_FinFET_SH",
+        "gds_argv": ["--result_file", "{res}", "--subckt_name", "{cell}",
+                     "--layer", "{layer}", "--gds_file", "{gds}"],
         "arch": "單層平面 (1 tier)",
         "placement": "PC",
         "pin_access": "M0",
@@ -148,6 +168,11 @@ TECHS = {
         "preset": "CFET_4T_SH",
         "layer_json": "PROBE3_CFET_2F_4T_4530OF0.json",
         "gds_writer": "gds_CFET_SH",
+        "gds_argv": ["--result_file", "{res}", "--subckt_name", "{cell}",
+                     "--layer", "{layer}", "--gds_file", "{gds}"],
+        # 11/0, 17/0 and 88/0 are the datatype-0 union copies of the per-tier
+        # shapes already listed above; drawing them would double-render.
+        "ignore_keys": ["11/0", "17/0", "88/0"],
         "arch": "垂直堆疊 (2 tier, P_on_N)",
         "placement": "PC (上) / BPC (下)",
         "pin_access": "BPC, M0",
@@ -159,6 +184,8 @@ TECHS = {
         "preset": "QFET_4T_SH",
         "layer_json": "PROBE3_QFET_2F_4T_4242OF21.json",
         "gds_writer": "gds_QFET_SH",
+        "gds_argv": ["--result", "{res}", "--layer", "{layer}",
+                     "--subckt", "{cell}", "--gds", "{gds}", "--draw-virtual"],
         "arch": "正面 + 背面 (2 tier)",
         "placement": "PC1 (正面) / BPC1 (背面)",
         "pin_access": "BM0, M0",

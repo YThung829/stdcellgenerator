@@ -1,0 +1,148 @@
+{
+  "schema": "stack3d/migration@1",
+  "from": "FinFET",
+  "to": "CFET",
+  "cell": "INV_X1",
+  "headline": "P/N 的分離從 Y 軸的兩條 row band，變成 Z 軸的兩個 tier",
+
+  "_format": [
+    "JSON rather than YAML on purpose: the whole stack3d pipeline runs on the",
+    "Python standard library so it rebuilds inside an air-gapped environment,",
+    "and PyYAML is not in the standard library. Prose that would have been a",
+    "YAML comment lives in the `note` fields, which are real data the viewer",
+    "renders.",
+    "",
+    "Every `from` / `to` key is a GDS <layer>/<datatype> pair and must exist in",
+    "the corresponding technology's stack table in layers.py. migrate.py",
+    "verifies that, so this file cannot drift from the geometry it describes."
+  ],
+
+  "fold": {
+    "note": [
+      "The migration reads as a fold: the PMOS row band rotates 180 degrees",
+      "about a line running along the cell's X direction, landing mirrored on",
+      "top of the NMOS band. The numbers below are exact, not decorative --",
+      "rotating FinFET's PMOS ACTIVE box y[79,125] about y=72 lands it at",
+      "y[19,65], which is precisely where the NMOS band sits.",
+      "",
+      "After the fold there is a second, smaller motion: each tier grows in Y",
+      "from a half-band (46 nm) to the full cell height (106 nm), because a",
+      "CFET tier no longer shares the cell height with the other device type.",
+      "That stretch is why CFET's P_ACTIVE and N_ACTIVE both span y[19,125]."
+    ],
+    "axis": "x",
+    "at_y": 72.0,
+    "at_z": 46.0,
+    "moving_role": "P",
+    "source_role_rule": "a source box whose Y centre is above at_y carries the P device; below it, N"
+  },
+
+  "invariants": [
+    {"what": "cell 寬度", "value": "90 nm", "why": "CPP 45 與 COL=2 兩邊相同"},
+    {"what": "cell 高度", "value": "144 nm", "why": "同樣是 4-track、M0 pitch 24"},
+    {"what": "CPP / M1P / OF", "value": "45 / 30 / 0", "why": "兩個 preset 的數值相同"},
+    {"what": "BEOL 疊構", "value": "M0 · M1 · M2 與 CA / V0 / V1", "why": "遷移只動元件層，金屬層順序不變"},
+    {"what": "gate 的 GDS 層號", "value": "7/0", "why": "CFET 的 gate stack 穿過兩個 tier，仍然只有一個圖層"}
+  ],
+
+  "model": {
+    "note": [
+      "Engine-level changes -- what the solver gains. Read from the layer JSON",
+      "and archit/*/tech.py, NOT from the GDS. Two of these three produce no",
+      "geometry at all, which is exactly why they need saying out loud: BPC is",
+      "a placement tier the solver reasons about, and BCA has no gds_layer, so",
+      "the writer emits its contacts onto CA's 14/0."
+    ],
+    "placement_layers": {"from": ["PC"], "to": ["PC", "BPC"]},
+    "pin_access_layers": {"from": ["M0"], "to": ["BPC", "M0"]},
+    "lgg_z_order": {
+      "from": ["PC", "M0", "M1", "M2"],
+      "to": ["BPC", "PC", "M0", "M1", "M2"]
+    },
+    "added": [
+      {
+        "name": "BPC", "kind": "metal", "layer_number": 6,
+        "draws_geometry": false,
+        "note": "底層 placement tier。solver 會用它擺 NMOS，但 GDS writer 不會為它畫任何東西 —— gate 幾何全部落在 7/0。"
+      },
+      {
+        "name": "BCA", "kind": "via", "lower": "BPC", "upper": "M0",
+        "draws_geometry": false,
+        "note": "layer JSON 裡沒有 gds_layer，writer 用跟 CA 同一支 __ca__() 畫在 14/0。所以 14/0 會混到兩種高度的接觸。"
+      },
+      {
+        "name": "BPC↔M0", "kind": "virtual_edge", "method": "boundary",
+        "draws_geometry": false,
+        "note": "寫死在 CFET/main.py 的 _init_graph，不是由 layer JSON 宣告（QFET 的 VL1 才是）。"
+      }
+    ],
+    "config_forced": [
+      {
+        "key": "lisd_routing", "value": true,
+        "note": "archit/config.py 看到 tech==\"CFET\" 就強制開啟；FinFET 預設 false。"
+      },
+      {
+        "key": "lig_routing", "value": true,
+        "note": "同上。CFET 少了一層平面繞線資源，必須靠 MOL 補回來。"
+      }
+    ]
+  },
+
+  "masks": [
+    {
+      "kind": "split_by_tier",
+      "from": {"key": "11/0", "name": "ACTIVE"},
+      "to": [
+        {"key": "11/1", "name": "P_ACTIVE", "role": "P"},
+        {"key": "11/2", "name": "N_ACTIVE", "role": "N"}
+      ],
+      "note": "遷移的主角。FinFET 用兩個 y band 區分 P/N（y[79,125] 與 y[19,65]）；CFET 改用 datatype 區分 tier，兩層的 x/y 完全相同（都是 y[19,125]）。"
+    },
+    {
+      "kind": "split_by_tier",
+      "from": {"key": "88/0", "name": "SDT"},
+      "to": [
+        {"key": "88/1", "name": "P_SDT", "role": "P"},
+        {"key": "88/2", "name": "N_SDT", "role": "N"}
+      ],
+      "note": "source/drain trench 跟著它的 diffusion 走。"
+    },
+    {
+      "kind": "split_by_tier",
+      "from": {"key": "17/0", "name": "LISD"},
+      "to": [
+        {"key": "17/1", "name": "P_LISD", "role": "P"},
+        {"key": "17/2", "name": "N_LISD", "role": "N"}
+      ],
+      "note": "box 數量不會 1:1 對應 —— FinFET 在 P/N 共用同一個 S/D net 時會畫一根貫穿兩個 band 的 merged LISD，CFET 則是兩個 tier 各畫各的。"
+    },
+    {
+      "kind": "reinterpreted",
+      "from": {"key": "7/0", "name": "PC / GATE"},
+      "to": [{"key": "7/0", "name": "GATE (PC+BPC)", "role": "shared"}],
+      "note": "圖層號沒變，但意義變了：CFET 的 gate stack 實體上穿過上下兩顆元件，所以 writer 仍然只畫一個圖層，而立體圖裡它的 z 區間橫跨兩個 tier。"
+    },
+    {
+      "kind": "reinterpreted",
+      "from": {"key": "14/0", "name": "CA"},
+      "to": [{"key": "14/0", "name": "CA", "role": "shared"}],
+      "note": "同一個圖層，但 CFET 多承載了 BPC→M0 的接觸（BCA 沒有自己的 gds_layer）。內附的 INV_X1 沒有用到那條路徑，所以這顆 cell 的 14/0 仍然全是上層 tier 的接觸。"
+    },
+    {"kind": "unchanged", "from": {"key": "1/0",  "name": "WELL"},     "to": [{"key": "1/0",  "name": "WELL",     "role": "shared"}], "note": "基板標記，不隨遷移改變。"},
+    {"kind": "unchanged", "from": {"key": "2/0",  "name": "FIN"},      "to": [{"key": "2/0",  "name": "FIN",      "role": "shared"}], "note": "writer 不管有沒有元件都鋪滿整個 cell，所以兩邊完全一樣。"},
+    {"kind": "unchanged", "from": {"key": "10/0", "name": "GATE_CUT"}, "to": [{"key": "10/0", "name": "GATE_CUT", "role": "shared"}], "note": "gate cut 遮罩。"},
+    {"kind": "unchanged", "from": {"key": "12/0", "name": "NSELECT"},  "to": [{"key": "12/0", "name": "NSELECT",  "role": "shared"}], "note": "n 佈植遮罩。"},
+    {"kind": "unchanged", "from": {"key": "13/0", "name": "PSELECT"},  "to": [{"key": "13/0", "name": "PSELECT",  "role": "shared"}], "note": "p 佈植遮罩。"},
+    {"kind": "unchanged", "from": {"key": "16/0", "name": "LIG"},      "to": [{"key": "16/0", "name": "LIG",      "role": "shared"}], "note": "gate 的區域互連。"},
+    {"kind": "unchanged", "from": {"key": "15/0", "name": "M0"},       "to": [{"key": "15/0", "name": "M0",       "role": "shared"}], "note": "BEOL 不動，只是整體被推高（CFET 的元件疊構比較厚）。"},
+    {"kind": "unchanged", "from": {"key": "18/0", "name": "V0"},       "to": [{"key": "18/0", "name": "V0",       "role": "shared"}], "note": "同上。"},
+    {"kind": "unchanged", "from": {"key": "19/0", "name": "M1"},       "to": [{"key": "19/0", "name": "M1",       "role": "shared"}], "note": "同上。"},
+    {"kind": "unchanged", "from": {"key": "21/0", "name": "V1"},       "to": [{"key": "21/0", "name": "V1",       "role": "shared"}], "note": "這顆 INV 沒繞到 M2，兩邊都是空的。"},
+    {"kind": "unchanged", "from": {"key": "20/0", "name": "M2"},       "to": [{"key": "20/0", "name": "M2",       "role": "shared"}], "note": "同上。"}
+  ],
+
+  "target_union_copies": {
+    "keys": ["11/0", "17/0", "88/0"],
+    "note": "CFET writer 除了分 tier 的 datatype 之外，還會把同樣的形狀在 datatype 0 再畫一次。立體圖把它們列在 ignore_keys，否則兩個 tier 會被重複渲染。遷移對照表也不該把它們算成 FinFET 對應層的目標。"
+  }
+}

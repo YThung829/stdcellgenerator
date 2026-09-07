@@ -98,6 +98,55 @@ GDS 層，立體圖會把它畫在上層 tier 的高度。要處理的話得改�
   `--draw-virtual` 才會把它畫在 debug layer 700 上，走它要付
   `virtual_edge_cost`（預設 5，比 metal 的 1 和 via 的 3 貴）。
 
+## 製程遷移
+
+`migrations/finfet_to_cfet.json` 用一個跟幾何分開的中間表達式，描述兩個製程之間的
+關係。頁面上會據此播一段**折疊動畫**：FinFET → CFET。
+
+IR 記兩層資訊，這個區分是重點：
+
+| | 內容 | 例子 |
+|---|---|---|
+| **光罩層對應**（`masks`） | GDS 上看得到的層怎麼對應 | `11/0 ACTIVE` → `11/1 P_ACTIVE` + `11/2 N_ACTIVE`（依 tier 拆分） |
+| **模型層變化**（`model`） | solver 拿到、但**不產生任何幾何**的 | `BPC` placement tier、`BCA` via、`BPC↔M0` 虛擬邊 —— 三個都畫不出東西 |
+
+每個對應標了 `kind`：`split_by_tier`（依 tier 拆分）／`reinterpreted`（沿用圖層號
+但語意改變，例如 CFET 的 `7/0` gate 變成貫穿兩個 tier）／`unchanged`。
+
+```bash
+python tools/stack3d/migrate.py --report   # 印出每一層的配對表
+python tools/stack3d/migrate.py --check    # 只驗證，對不上就 exit 非零
+```
+
+`migrate.py` 會檢查 IR 裡每個 `from` / `to` 的 GDS key 都真的存在於對應製程的堆疊
+表，所以 IR 不可能跟幾何走鐘。**寫這個 IR 的當下它就抓到一個真的 bug**：CFET 的
+堆疊表漏了 `21/0 V1`（這顆 INV 沒繞到 M2，所以一直沒被發現）。`audit.py` 現在也
+會檢查「layer JSON 宣告、writer 畫得出來、但堆疊表沒列」的層。
+
+### 折疊是精確的
+
+把 FinFET 的 PMOS band `y[79,125]` 繞 `y=72` 轉 180°，正好落在 `y[19,65]` ——
+也就是 NMOS band 所在的位置。動畫分兩段：
+
+1. **折疊**（t 0→0.5）：P band 繞折疊軸轉 180°，疊到 N band 正上方。
+2. **落位**（t 0.5→1）：每個 box 移到真實的 CFET 位置。這段才發生**拉伸**
+   （一個 CFET tier 不必再跟另一種元件分享 cell 高度，所以長成整個 cell 高）
+   和 BEOL 整體被推高。
+
+**兩端都是真實幾何**，插值的只有動作；配對由 `migrate.py` 在 build 時算好，
+不是前端猜的。
+
+### 為什麼是 JSON 不是 YAML
+
+整條 pipeline 只用 Python 標準函式庫（才能在無網路環境重建），而 PyYAML 不在
+標準函式庫裡。原本該寫成 YAML 註解的說明，改放進 `note` 欄位 —— 那是頁面真的會
+渲染的資料，不是註解。
+
+### 要加一組新的遷移
+
+在 `migrations/` 放一個新的 JSON（照 `finfet_to_cfet.json` 的 schema），
+`build.py` 會自動撿起來。兩端的製程都要在 `TECH_ORDER` 裡才會被納入。
+
 ## 檢查正確性
 
 ```bash
@@ -192,6 +241,8 @@ python tools/stack3d/build.py            # 約 674 KB，完全離線（預設）
 | `dump_gds.py` | 讀 GDS，把每個 shape 依 `(layer, datatype)` dump 成 nm 座標 |
 | `gdstext.py` | GDS ↔ 純文字的雙向轉換（`encode` / `decode` / `verify`） |
 | `audit.py` | 逐項比對立體圖的宣稱與 engine 來源檔案 |
+| `migrate.py` | 讀遷移 IR，驗證它對得上 `layers.py`，並在 build 時算好每個 box 的配對 |
+| `migrations/*.json` | **製程遷移的中間表達式** —— 哪一層變成哪一層 |
 | `inspect_tech.py` | 幫你把一個架構的事實挖出來：LGG z 順序、via 鏈、虛擬邊、GDS-only 層、writer 用到的 layer/datatype、以及跟 `layers.py` 的涵蓋率 diff |
 | `template/head.html` | `<title>` + 全部 CSS |
 | `template/body.html` | 頁面骨架與說明文字 |

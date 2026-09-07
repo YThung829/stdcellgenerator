@@ -66,6 +66,8 @@ CFET = [
     ("11/1",  "P_ACTIVE",     92, 138, "top",      "#34d399", "TOP tier diffusion (PMOS, on PC) - same X/Y footprint as N_ACTIVE", 1),
     ("88/1",  "P_SDT",       100, 138, "top",      "#fbbf24", "top-tier source/drain trench", 1),
     ("17/1",  "P_LISD",      138, 158, "top",      "#fcd34d", "top-tier local interconnect (S/D)", 1),
+    ("6/0",   "BPC (model)",   0,  66, "device",   "#7f1d1d", "BOTTOM placement tier. The solver places NMOS on it, but the writer never draws to 6/0 - all gate geometry lands on 7/0, so this row is always empty.", 1),
+    ("7/1",   "PC (model)",   92, 158, "device",   "#7f1d1d", "TOP placement tier. Same story as BPC: declared, reasoned about, never drawn.", 1),
     ("7/0",   "GATE (PC+BPC)", 0, 150, "device",   "#ef4444", "ONE gate stack runs through both tiers - the CFET signature", 1),
     ("10/0",  "GATE_CUT",    130, 154, "mask",     "#94a3b8", "gate cut", 0),
     ("16/0",  "LIG",         150, 174, "mol",      "#fb923c", "local interconnect to gate", 1),
@@ -73,7 +75,8 @@ CFET = [
     ("15/0",  "M0",          174, 188, "beol",     "#3b82f6", "M0, horizontal, pitch 24", 1),
     ("18/0",  "V0",          188, 202, "via",      "#e2e8f0", "via M0 -> M1", 1),
     ("19/0",  "M1",          202, 216, "beol",     "#8b5cf6", "M1, vertical, pitch 30", 1),
-    ("20/0",  "M2",          216, 230, "beol",     "#ec4899", "M2, horizontal, pitch 24", 1),
+    ("21/0",  "V1",          216, 230, "via",      "#e2e8f0", "via M1 -> M2", 1),
+    ("20/0",  "M2",          230, 244, "beol",     "#ec4899", "M2, horizontal, pitch 24", 1),
     # 11/0, 17/0 and 88/0 (datatype 0) are the union copies the writer also
     # emits; listing them would double-render both tiers, so they are omitted.
 ]

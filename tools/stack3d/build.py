@@ -49,6 +49,7 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 import layers as L  # noqa: E402  (path set above)
 from gdstext import read_text  # noqa: E402
+import migrate as M  # noqa: E402
 
 DEFAULT_ENGINE = Path(os.environ.get("STACK3D_ENGINE", REPO / "engine"))
 DEFAULT_CELL = os.environ.get("STACK3D_CELL", "INV_X1")
@@ -265,7 +266,17 @@ def build_payload(ctx, techs_wanted: list) -> dict:
               f"{sum(len(s['polys']) for s in stack)} polygons")
 
     alpha = {t: L.ALPHA.get(t, {}) for t in techs_wanted}
-    return {"techs": techs, "meta": meta, "alpha": alpha}
+    # Migrations are only meaningful when both endpoints are in this build.
+    print("migrations:")
+    migs = {k: v for k, v in M.all_migrations(ctx, quiet=True).items()
+            if v["from"] in techs and v["to"] in techs}
+    for k, v in migs.items():
+        n = sum(1 for p in v["pairs"] if p["m"] == "morph")
+        print(f"  {v['from']:>7} → {v['to']:<7} {len(v['masks'])} mappings, "
+              f"{len(v['pairs'])} box pairs ({n} morph)")
+    if not migs:
+        print("  (none applicable)")
+    return {"techs": techs, "meta": meta, "alpha": alpha, "migrations": migs}
 
 
 VENDOR_THREE = HERE / "vendor" / "three.min.js"
@@ -306,6 +317,7 @@ def assemble(payload: dict, out_path: Path, offline: bool = True) -> None:
         head = inline_three(head)
     body = (HERE / "template" / "body.html").read_text(encoding="utf-8")
     app = (HERE / "template" / "app.js").read_text(encoding="utf-8")
+    app += "\n" + (HERE / "template" / "migrate.js").read_text(encoding="utf-8")
 
     # The technology switcher is generated from the payload, so a newly
     # onboarded architecture appears without touching body.html.

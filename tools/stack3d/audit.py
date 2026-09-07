@@ -62,6 +62,26 @@ def audit(ctx, tech: str) -> None:
     else:
         check(OK, tech, "every drawn layer is claimed by a stack row")
 
+    # ---- 2b. every declared, drawable layer has a row ---------------------
+    # The orphan check above only sees layers with geometry in THIS cell. A
+    # layer the JSON declares and the writer can emit, but the stack table
+    # omits, stays invisible until some other cell uses it -- and then it
+    # silently disappears from the picture. Check the declaration, not the
+    # sample.
+    declared = []
+    for v in lj.values():
+        gl = v.get("gds_layer")
+        if gl is None:
+            continue
+        k = f"{gl}/{int(v.get('gds_datatype', 0))}"
+        if k not in claimed and k not in ignored:
+            declared.append(f"{k} ({v.get('layer_name')})")
+    if declared:
+        check(FAIL, tech, "declared in the layer JSON but missing a stack row",
+              ", ".join(sorted(declared)))
+    else:
+        check(OK, tech, "every layer the JSON declares has a stack row")
+
     # ---- 3. stack z order agrees with the LGG metal order -----------------
     lgg = B.lgg_order(lj_path)
     zmid = {}

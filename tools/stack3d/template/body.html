@@ -37,6 +37,53 @@
   </div>
 </div>
 
+<section id="mig" class="mig">
+  <div class="mig-head">
+    <p class="eyebrow">Process migration</p>
+    <h2>FinFET → CFET：把平面折起來</h2>
+    <p class="lede">兩端都是這個 repo 真的解出來的 <code>INV_X1</code>。中間插值的是<b>動作</b>，不是幾何 —— 每個 box 從真實的 FinFET 形狀出發、落在真實的 CFET 形狀上，配對是 <code>migrate.py</code> 在 build 時算好的，不是前端猜的。</p>
+    <p class="lede"><b>折疊是精確的，不是修辭。</b>把 FinFET 的 PMOS band <span class="mono">y[79,125]</span> 繞 <span class="mono">y=72</span> 轉 180°，正好落在 <span class="mono">y[19,65]</span> —— 也就是 NMOS band 所在的位置。</p>
+  </div>
+
+  <div class="mig-stage">
+    <canvas id="mig-gl"></canvas>
+    <div class="mig-hud">
+      <button type="button" id="mig-play">播放</button>
+      <input id="mig-t" type="range" min="0" max="1000" value="0" aria-label="遷移進度">
+      <span id="mig-phase" class="mig-phase">FinFET</span>
+    </div>
+    <div class="mig-jump">
+      <button type="button" data-goto="0">FinFET</button>
+      <button type="button" data-goto="0.5">折疊完成</button>
+      <button type="button" data-goto="1">CFET</button>
+    </div>
+  </div>
+
+  <div class="mig-cols">
+    <div>
+      <h3>中間表達式定義了什麼</h3>
+      <p>遷移關係寫在 <code>migrations/finfet_to_cfet.json</code>，跟幾何分開。它記兩層資訊：<b>光罩層對應</b>（GDS 上看得到的）和<b>模型層變化</b>（solver 拿到、但不產生任何幾何的）。<code>migrate.py</code> 會驗證每個 key 都真的存在於 <code>layers.py</code> 的堆疊表裡，對不上就 build 失敗。</p>
+      <p class="ref">格式選 JSON 不選 YAML：整條 pipeline 只用 Python 標準函式庫（才能在無網路環境重建），而 PyYAML 不在標準函式庫裡。原本該寫成 YAML 註解的說明，改放進 <code>note</code> 欄位 —— 那是頁面真的會渲染的資料。</p>
+      <h3>模型層新增（不產生幾何）</h3>
+      <ul id="mig-model" class="mig-list"></ul>
+    </div>
+    <div>
+      <h3>遷移不動的東西</h3>
+      <ul id="mig-inv" class="mig-list"></ul>
+      <div class="note">
+        <p><b>為什麼折疊完還要再動一次？</b>折疊只把 P band 疊到 N band 上（各 46nm 高）。但 CFET 的一個 tier 不必再跟另一種元件分享 cell 高度，所以第二段會把它<b>拉伸成整個 cell 高度</b> —— 這就是為什麼 CFET 的 <span class="mono">P_ACTIVE</span> 和 <span class="mono">N_ACTIVE</span> 都是 <span class="mono">y[19,125]</span>。BEOL 整體被推高也發生在這一段（CFET 的元件疊構比較厚）。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="tablewrap">
+    <table class="mig-table">
+      <thead><tr><th>類型</th><th>FinFET</th><th>CFET</th><th>說明</th></tr></thead>
+      <tbody id="mig-map"></tbody>
+    </table>
+  </div>
+</section>
+
 <main class="doc">
 
 <section class="blk">

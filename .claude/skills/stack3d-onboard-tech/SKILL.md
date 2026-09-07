@@ -17,21 +17,30 @@ on *identical* x/y bounds and the GDS can only tell them apart by datatype —
 in any 2D layout viewer they are perfectly superimposed. Pulling them apart is
 the whole point of this tool.
 
-Your job is to turn one architecture's source into one `layers.py` entry.
+Your job is to turn one architecture's source into one `techs/<name>.toml` spec.
 
 ## What you are actually producing
 
-A stack table: an ordered list of rows, one per GDS layer/datatype the writer
-emits, each with a z interval.
+A spec in `tools/stack3d/techs/<name>.toml`: the layers listed **bottom to
+top**, each with a role and a thickness. Copy `techs/_TEMPLATE.toml`, which
+carries the full role list and every placement form.
 
-```python
-# (gds_key, display_name, z0, z1, group, color, note, default_on)
-("11/2", "N_ACTIVE", 0, 46, "bot", "#10b981", "BOTTOM tier diffusion (NMOS, on BPC)", 1),
+```toml
+[[layer]]
+name = "N_ACTIVE"
+role = "diffusion"       # drives thickness, colour, group, visibility, alpha
+gds  = "11/2"
+tier = "bottom"
+align = "FIN"            # or: gap = N / span = ["A","B"] / nothing at all
 ```
 
-plus a `TECHS[...]` entry wiring it to the preset, layer JSON and GDS writer.
-`build.py` needs no changes — if you find yourself editing it, you have
-probably misread the extension point.
+You never write a z coordinate — `techspec.py` computes them from the order and
+the per-role thickness table. That is deliberate: thicknesses are the one thing
+the repo genuinely does not know, so they live in one visible table rather than
+being invented per layer.
+
+`layers.py` and `build.py` need no changes. If you find yourself editing either,
+you have probably misread the extension point.
 
 **The honesty line matters more than the visuals.** Order is derived; z values
 are not. Keep that distinction intact in what you write and what you tell the
@@ -63,8 +72,8 @@ The viewer needs real geometry, so solve a cell and generate its GDS. Pick a
 **small** one: an inverter exercises the whole stack and solves in under a
 second, where a flip-flop can run for minutes and adds nothing to the picture.
 
-Register the architecture in `layers.py` first (a stub stack table is fine),
-then:
+Write the spec's `[bind]` section first (preset, layer JSON, GDS writer, argv);
+a stub `[[layer]]` list is fine at this stage. Then:
 
 ```bash
 python tools/stack3d/build.py --tech <NAME> --solve --gds
@@ -79,9 +88,12 @@ If the writer's CLI flags differ from the existing ones, put them in the
 tech's `gds_argv`; that field exists so `build.py` never needs a per-tech
 branch.
 
-Registering with an empty stack table is a useful trick here: the build then
+Registering with a near-empty layer list is a useful trick here: the build then
 warns about every layer that has geometry and no row, sorted in roughly stack
 order. That list is your checklist for the next step.
+
+`python tools/stack3d/techspec.py --check` validates every spec, and its errors
+name the offending layer in the spec's own vocabulary.
 
 ## Step 3 — assign z intervals
 
@@ -92,32 +104,45 @@ python tools/stack3d/inspect_tech.py --name <NAME> --gds tools/stack3d/data/solv
 ```
 
 For an unregistered tech it prints a paste-ready skeleton with real layer
-names and `0, 0` z placeholders. For a registered one it prints a coverage
-diff instead: what the writer drew that your table does not claim, and what
-your table claims that has no geometry.
+names. For a registered one it prints a coverage diff instead: what the writer
+drew that your spec does not claim, and what your spec claims that has no
+geometry.
 
-Fill the z columns using this reasoning:
+Turn that into `[[layer]]` entries, bottom to top, using this reasoning:
 
 - **The metal/via backbone is given.** The LGG order from step 1 is the metal
-  ordering; each via sits in the gap between the two metals it names. Walk up
-  from the bottom and give each a slab. Do not reorder them to taste.
+  ordering; each via sits in the gap between the two metals it names. List them
+  in that order with no placement keyword at all — sequential is the default,
+  and it is right for the whole BEOL. Do not reorder them to taste.
 - **Device layers hang off their placement layer.** Diffusion, fins,
   source/drain trench and local interconnect belong to the tier whose gate
   poly they contact. On a multi-tier architecture, work out which placement
   layer each datatype belongs to before assigning anything — that mapping is
   the entire reason the viewer exists.
+- **Layers that share a level use `align`.** Fins and the diffusion around
+  them, or a source/drain trench inside the diffusion, are not stacked — say
+  `align = "FIN"` rather than computing an offset.
 - **Enveloping layers span, they do not stack.** A gate that physically runs
-  through two tiers gets one interval covering both, not two rows. Add it to
-  `ALPHA` so it renders semi-transparent, or it hides the tiers it explains.
-- **Leave real gaps.** Isolation between tiers should read as space. Touching
-  slabs look like one solid block.
-- Negative z is legitimate and means backside.
+  through two tiers gets `span = ["FIN", "P_LISD"]`, not a thickness. The
+  `gate` role already renders it semi-transparent, or it would hide the tiers
+  it explains.
+- **Leave real gaps.** `gap = N` between tiers; touching slabs look like one
+  solid block.
+- **A backside tier needs no flag.** Write its interconnect *before* its
+  diffusion — the file's order already says the contacts reach downward.
+- Negative z is legitimate and means backside; use `align = "origin"` with a
+  negative `offset`.
 
-A row whose geometry is empty is fine and often informative — an unused tier
-stays visible in the rail, greyed. A row you *omit* disappears silently, which
+A layer whose geometry is empty is fine and often informative — an unused tier
+stays visible in the rail, greyed. A layer you *omit* disappears silently, which
 is why `build.py` warns about drawn-but-unclaimed layers. Do not silence that
 warning with `ignore_keys` unless the layer is genuinely redundant (a
 datatype-0 union copy of shapes you already draw per-tier is the usual case).
+
+A layer the solver reasons about but the writer never draws gets
+`role = "model_only"` — that keeps it visible in the rail as an always-empty
+row, which is how "this tier exists in the model but has no mask" stays
+apparent instead of merely documented.
 
 ## Step 4 — build and look at it
 
@@ -141,8 +166,8 @@ architecture sits next to the existing ones and the switcher includes it.
 Tell the user, concisely:
 
 - which files you read to derive the order, and what that order is;
-- that the z intervals are illustrative and where they live, so they can tune
-  them;
+- that the thicknesses come from the per-role table in `techspec.py` and are
+  illustrative, so they know where to tune them;
 - anything you could not determine, and what you assumed instead;
 - any layer the writer emits that you deliberately did not draw, and why.
 
@@ -159,6 +184,8 @@ reorders the stack while every existing row still looks fine.
 
 ## References
 
+- `techs/_TEMPLATE.toml` — the annotated blank spec: role list, every
+  placement form, and a compiling worked example.
 - `references/reading-an-architecture.md` — what each engine file contributes,
   how the doubled-resolution coordinate system works, and the traps that have
   actually bitten (canvas width off by 2/3, GDS numbers hardcoded vs

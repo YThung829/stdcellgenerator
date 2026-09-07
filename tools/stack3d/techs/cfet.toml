@@ -1,0 +1,208 @@
+# Exported from layers.py by `techspec.py --export`. This is a worked
+# example of the handover format: layers are listed BOTTOM TO TOP and
+# carry a thickness, never an absolute coordinate.
+schema = "stack3d/tech@1"
+name = "CFET"
+order = 1
+summary = "垂直堆疊 (2 tier, P_on_N)"
+
+[geometry]
+summary = "垂直堆疊 (2 tier, P_on_N)"
+placement = "PC (上) / BPC (下)"
+pin_access = "BPC, M0"
+virtual_edges = "BPC↔M0 (boundary)"
+
+[bind]  # wiring to the engine -- not the process engineer's half
+preset = "CFET_4T_SH"
+layer_json = "PROBE3_CFET_2F_4T_4530OF0.json"
+gds_writer = "gds_CFET_SH"
+gds_argv = ["--result_file", "{res}", "--subckt_name", "{cell}", "--layer", "{layer}", "--gds_file", "{gds}"]
+ignore_keys = ["11/0", "17/0", "88/0"]
+
+[[layer]]
+name = "WELL"
+role = "substrate"
+gds  = "1/0"
+align = "origin"
+offset = -28
+thickness = 24
+note = "bulk / well marker"
+
+[[layer]]
+name = "NSELECT"
+role = "implant"
+gds  = "12/0"
+align = "WELL"
+offset = 22
+thickness = 6
+note = "n-implant mask"
+
+[[layer]]
+name = "FIN"
+role = "channel"
+gds  = "2/0"
+thickness = 42
+group = "bot"
+note = "bottom-tier fin channel"
+
+[[layer]]
+name = "N_ACTIVE"
+role = "diffusion"
+gds  = "11/2"
+align = "FIN"
+thickness = 46
+group = "bot"
+note = "BOTTOM tier diffusion (NMOS, on BPC)"
+
+[[layer]]
+name = "BPC (model)"
+role = "model_only"
+gds  = "6/0"
+align = "FIN"
+thickness = 66
+note = "BOTTOM placement tier. The solver places NMOS on it, but the writer never draws to 6/0 - all gate geometry lands on 7/0, so this row is always empty."
+
+[[layer]]
+name = "GATE (PC+BPC)"
+role = "gate"
+gds  = "7/0"
+align = "FIN"
+thickness = 150
+alpha = 0.3
+note = "ONE gate stack runs through both tiers - the CFET signature"
+
+[[layer]]
+name = "N_SDT"
+role = "sd_trench"
+gds  = "88/2"
+align = "WELL"
+offset = 36
+thickness = 38
+group = "bot"
+note = "bottom-tier source/drain trench"
+
+[[layer]]
+name = "N_LISD"
+role = "mol_sd"
+gds  = "17/2"
+align = "WELL"
+offset = 74
+thickness = 20
+group = "bot"
+note = "bottom-tier local interconnect (S/D). CFET routes on LISD/LIG"
+
+[[layer]]
+name = "PSELECT"
+role = "implant"
+gds  = "13/0"
+align = "WELL"
+offset = 114
+thickness = 6
+color = "#f472b6"
+note = "p-implant mask (top tier)"
+
+[[layer]]
+name = "P_ACTIVE"
+role = "diffusion"
+gds  = "11/1"
+align = "WELL"
+offset = 120
+thickness = 46
+group = "top"
+color = "#34d399"
+note = "TOP tier diffusion (PMOS, on PC) - same X/Y footprint as N_ACTIVE"
+
+[[layer]]
+name = "PC (model)"
+role = "model_only"
+gds  = "7/1"
+align = "P_ACTIVE"
+thickness = 66
+note = "TOP placement tier. Same story as BPC: declared, reasoned about, never drawn."
+
+[[layer]]
+name = "P_SDT"
+role = "sd_trench"
+gds  = "88/1"
+align = "WELL"
+offset = 128
+thickness = 38
+group = "top"
+color = "#fbbf24"
+note = "top-tier source/drain trench"
+
+[[layer]]
+name = "GATE_CUT"
+role = "cut"
+gds  = "10/0"
+align = "WELL"
+offset = 158
+thickness = 24
+note = "gate cut"
+
+[[layer]]
+name = "P_LISD"
+role = "mol_sd"
+gds  = "17/1"
+align = "WELL"
+offset = 166
+thickness = 20
+group = "top"
+color = "#fcd34d"
+note = "top-tier local interconnect (S/D)"
+
+[[layer]]
+name = "LIG"
+role = "mol_gate"
+gds  = "16/0"
+align = "WELL"
+offset = 178
+thickness = 24
+note = "local interconnect to gate"
+
+[[layer]]
+name = "CA"
+role = "via"
+gds  = "14/0"
+align = "WELL"
+offset = 186
+thickness = 16
+note = "contact via PC/BPC -> M0"
+
+[[layer]]
+name = "M0"
+role = "metal"
+gds  = "15/0"
+thickness = 14
+note = "M0, horizontal, pitch 24"
+
+[[layer]]
+name = "V0"
+role = "via"
+gds  = "18/0"
+thickness = 14
+note = "via M0 -> M1"
+
+[[layer]]
+name = "M1"
+role = "metal"
+gds  = "19/0"
+thickness = 14
+color = "#8b5cf6"
+note = "M1, vertical, pitch 30"
+
+[[layer]]
+name = "V1"
+role = "via"
+gds  = "21/0"
+thickness = 14
+note = "via M1 -> M2"
+
+[[layer]]
+name = "M2"
+role = "metal"
+gds  = "20/0"
+thickness = 14
+color = "#ec4899"
+note = "M2, horizontal, pitch 24"
+

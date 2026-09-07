@@ -190,6 +190,8 @@ QFET    Name  X  Y  <u>Z</u>  Flip  Width Height  SrcCol ...</pre>
       <tr><th>層與層的先後順序</th><td><b>真實</b> — 依 layer JSON 的 <code>layer_number</code>（即 LayerStack 排序後的 metal 順序）以及 via 的 <code>lower_layer → upper_layer</code> 鏈。</td></tr>
       <tr><th>每層的 z 起點與厚度</th><td><b>示意值，是我設的。</b>layer JSON 裡完全沒有厚度資訊 — 它只描述平面上的 direction / pitch / offset / width。整個 SMTCell 是 2D 的：solver 的「層」是圖的 z-index，GDS 是平面格式。所以厚度必須由外部補，我按一般 4-track 先進製程的相對比例給值，只保證<b>順序</b>與<b>誰跨越誰</b>正確。</td></tr>
       <tr><th>QFET 背面元件層是空的</th><td><b>真實結果</b> — 這顆 INV_X1 兩顆電晶體都落在正面 <span class="mono">PC1</span>。<span class="mono">ACTIVE_BACK_*</span> / <span class="mono">BSDT1</span> / <span class="mono">BLISD1</span> 沒有幾何，所以列在側欄但是空的（灰字斜體）。背面的 fin grid 和 <span class="mono">BM0</span> 電源軌有畫，因為 writer 不管有沒有元件都會鋪。</td></tr>
+      <tr><th>CFET 上下 tier 之間<br>看不到連接線</th><td><b>GDS 裡真的沒有。</b><code>gds_CFET_SH.py</code> 對 <span class="mono">BPC → PC</span> 的線段明確寫 <code>pass  # Handled by CFET stacking, no physical via needed</code> —— 上下兩顆元件的 source/drain 是靠堆疊本身相連，不需要實體 via，所以沒有任何光罩記錄它。這顆 INV 的繞線表裡有兩條 <span class="mono">MET 0 =&gt; 1</span>，畫出來是零個多邊形。<b>立體圖只畫 GDS 裡有的東西，所以這條路徑看不到。</b><br>對照 QFET：它的層間路徑 <span class="mono">MIV1/2/3</span> 有自己的 GDS 層（5000-5002），用到時就畫得出來。</td></tr>
+      <tr><th>CFET 的 <span class="mono">14/0</span><br>混了兩種高度的接觸</th><td><b>已知限制。</b>layer JSON 裡 <span class="mono">BCA</span>（BPC→M0）<b>沒有 <code>gds_layer</code></b>，writer 用跟 <span class="mono">CA</span>（PC→M0）同一支 <code>__ca__()</code> 畫在 <span class="mono">14/0</span> 上。這顆 INV_X1 的繞線表沒有任何 <span class="mono">MET 0 =&gt; 2</span>，所以 <span class="mono">14/0</span> 全部都是上層 tier 的接觸加電源軌接觸 —— 目前的 z 區間是對的。但如果換一顆 cell 用到 BPC→M0，那個接觸會高得多卻落在同一層，立體圖會把它畫在上層 tier 的高度。</td></tr>
     </tbody>
   </table>
   </div>

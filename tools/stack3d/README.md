@@ -70,6 +70,25 @@ PMOS row 2，跟 FinFET 一樣）。所以 QFET 裡 `11/1` vs `11/2` 差在 Y，
 `layer_number` 比 `BPC1` 小（在下面），所以背面元件的接觸往**下**走 ——
 `BLISD1` 在背面 diffusion 底下，正面的 `LISD1` 則在 diffusion 上面。
 
+### 兩個已查證的限制
+
+**CFET 上下 tier 之間在 GDS 裡沒有任何幾何。**
+`gds_CFET_SH.py` 對 `BPC → PC` 的線段明確 `pass`（註解：*Handled by CFET
+stacking, no physical via needed*）—— 上下兩顆元件的 source/drain 靠堆疊本身
+相連，不需要實體 via。所以繞線表裡的 `MET 0 => 1` 畫出來是零個多邊形，立體圖上
+下層的 `N_LISD` 和上層的 `P_LISD` 看起來不相連。**這是 GDS 的實情，不是畫錯。**
+
+對照組：QFET 的層間路徑 `MIV1/2/3` 有自己的 GDS 層（5000-5002），有用到就畫得
+出來。這是兩種架構在「層間連接怎麼記錄」上的真實差異，值得在說明時點出來。
+
+**CFET 的 `14/0` 同時承載兩種高度的接觸。**
+layer JSON 裡 `BCA`（BPC→M0）**沒有 `gds_layer`**，writer 用跟 `CA`（PC→M0）
+同一支 `__ca__()` 畫在 `14/0`。內附的 `INV_X1` 沒有任何 `MET 0 => 2` 線段
+（可在 `.res` 的繞線表確認），所以 `14/0` 全部是上層 tier 的接觸加電源軌接觸，
+目前的 z 區間正確。但換一顆用到 BPC→M0 的 cell，那個接觸實體上高得多卻落在同一
+GDS 層，立體圖會把它畫在上層 tier 的高度。要處理的話得改成從 `.res` 分辨，而不是
+只看 GDS。
+
 ### 附註
 
 - 內附的 `INV_X1` 太小，QFET 的兩顆電晶體都落在正面 `PC1`（`.res` 的 `Z` 欄可以

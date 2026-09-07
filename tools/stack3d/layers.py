@@ -32,8 +32,8 @@ vanishing.
 # --------------------------------------------------------------------------
 FINFET = [
     ("1/0",   "WELL",       -28,  -4, "substrate", "#64748b", "n-well / bulk marker", 0),
-    ("12/0",  "NSELECT",     -6,  -2, "implant",   "#a78bfa", "n-implant mask", 0),
-    ("13/0",  "PSELECT",     -6,  -2, "implant",   "#f472b6", "p-implant mask", 0),
+    ("12/0",  "NSELECT",     -6,   0, "implant",   "#a78bfa", "n-implant mask", 0),
+    ("13/0",  "PSELECT",     -6,   0, "implant",   "#f472b6", "p-implant mask", 0),
     ("2/0",   "FIN",           0,  42, "device",   "#22d3ee", "fin channel grid (5 fins, pitch 18 / width 6)", 1),
     ("11/0",  "ACTIVE",        0,  46, "device",   "#10b981", "diffusion (OD): PMOS band on top, NMOS below", 1),
     ("88/0",  "SDT",           8,  46, "device",   "#f59e0b", "source/drain trench (epi)", 1),
@@ -57,12 +57,12 @@ FINFET = [
 # --------------------------------------------------------------------------
 CFET = [
     ("1/0",   "WELL",       -28,  -4, "substrate", "#64748b", "bulk / well marker", 0),
-    ("12/0",  "NSELECT",     -6,  -2, "implant",   "#a78bfa", "n-implant mask", 0),
+    ("12/0",  "NSELECT",     -6,   0, "implant",   "#a78bfa", "n-implant mask", 0),
     ("2/0",   "FIN",           0,  42, "bot",      "#22d3ee", "bottom-tier fin channel", 1),
     ("11/2",  "N_ACTIVE",      0,  46, "bot",      "#10b981", "BOTTOM tier diffusion (NMOS, on BPC)", 1),
     ("88/2",  "N_SDT",         8,  46, "bot",      "#f59e0b", "bottom-tier source/drain trench", 1),
     ("17/2",  "N_LISD",       46,  66, "bot",      "#fbbf24", "bottom-tier local interconnect (S/D). CFET routes on LISD/LIG", 1),
-    ("13/0",  "PSELECT",      86,  90, "implant",  "#f472b6", "p-implant mask (top tier)", 0),
+    ("13/0",  "PSELECT",      86,  92, "implant",  "#f472b6", "p-implant mask (top tier)", 0),
     ("11/1",  "P_ACTIVE",     92, 138, "top",      "#34d399", "TOP tier diffusion (PMOS, on PC) - same X/Y footprint as N_ACTIVE", 1),
     ("88/1",  "P_SDT",       100, 138, "top",      "#fbbf24", "top-tier source/drain trench", 1),
     ("17/1",  "P_LISD",      138, 158, "top",      "#fcd34d", "top-tier local interconnect (S/D)", 1),
@@ -127,8 +127,8 @@ QFET = [
     ("5002/0","MIV3",           -17,    0, "miv",      "#f0abfc", "MIV H1 -> PC1 (climbs into the front tier)", 1),
     # ---- frontside device tier ----
     ("1/0",   "WELL_FRONT",     -15,   -7, "substrate","#64748b", "frontside well marker", 0),
-    ("12/0",  "NSELECT_FRONT",   -5,   -2, "implant",  "#a78bfa", "frontside n-implant mask", 0),
-    ("13/0",  "PSELECT_FRONT",   -5,   -2, "implant",  "#f472b6", "frontside p-implant mask", 0),
+    ("12/0",  "NSELECT_FRONT",   -5,    0, "implant",  "#a78bfa", "frontside n-implant mask", 0),
+    ("13/0",  "PSELECT_FRONT",   -5,    0, "implant",  "#f472b6", "frontside p-implant mask", 0),
     ("2/0",   "FIN_FRONT",        0,   42, "device",   "#22d3ee", "frontside fin grid (hardcoded 2/0 in the writer)", 1),
     ("11/1",  "ACTIVE_FRONT_P",   0,   46, "device",   "#34d399", "frontside diffusion, PMOS band (upper Y)", 1),
     ("11/2",  "ACTIVE_FRONT_N",   0,   46, "device",   "#10b981", "frontside diffusion, NMOS band (lower Y)", 1),

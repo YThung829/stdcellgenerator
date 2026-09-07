@@ -151,7 +151,28 @@ def audit(ctx, tech: str) -> None:
     else:
         check(WARN, tech, f"no tech.py at {tech_py} (custom architecture?)")
 
-    # ---- 9. the one thing that is NOT derivable --------------------------
+    # ---- 9. vertical continuity ------------------------------------------
+    # A hole in the z chain means the picture shows a connection that does not
+    # visibly connect. Every hole must have a reason; unexplained ones are how
+    # a viewer ends up implying a floating contact.
+    spans = sorted(((r[2], r[3], r[1]) for r in stack),
+                   key=lambda t: t[0])
+    merged = []
+    for z0, z1, name in spans:
+        if merged and z0 <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], z1),
+                          merged[-1][2] + [name])
+        else:
+            merged.append((z0, z1, [name]))
+    if len(merged) > 1:
+        holes = [f"{a[1]}..{b[0]} nm (between {a[2][-1]} and {b[2][0]})"
+                 for a, b in zip(merged, merged[1:])]
+        check(WARN, tech, f"{len(holes)} gap(s) in the z chain",
+              "; ".join(holes))
+    else:
+        check(OK, tech, "z chain is continuous from bottom to top")
+
+    # ---- 10. the one thing that is NOT derivable -------------------------
     lo = min(r[2] for r in stack)
     hi = max(r[3] for r in stack)
     check(WARN, tech, "z thicknesses are ILLUSTRATIVE, not from any file",

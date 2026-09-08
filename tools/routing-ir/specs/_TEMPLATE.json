@@ -1,0 +1,108 @@
+{
+  "schema": "smtcell/routing-ir@1",
+  "name": "MYTECH",
+  "summary": "一句話說明這個架構的幾何本質",
+
+  "_how_to_fill": [
+    "這份只問繞線會用到的層。完整光罩疊構（well / implant / fin / cut）不在這裡，",
+    "那是 tools/stack3d/techs/*.toml 的事。",
+    "",
+    "最重要的欄位是 in_graph —— 它決定 router 會不會沿著這層走：",
+    "  in_graph = true   solver 的繞線圖在這層上有節點，繞線是穿過這些節點的路徑。",
+    "                    poly 和所有 metal 屬於這類，必須給 direction/pitch/offset/width。",
+    "  in_graph = false  這層有幾何但不在圖上。od 和 md 屬於這類。",
+    "                    要改寫 access_via（router 透過哪個圖層碰到它）",
+    "                    和 enabled_by（哪個 config 旗標開關這條路）。",
+    "",
+    "為什麼 md 不是圖層：在這個 engine 裡，「在 MD 上繞線」是被模型化成",
+    "「允許 poly<->M0 的 via 落在 S/D 欄上」，不是一條獨立的繞線層。",
+    "lisd_routing / lig_routing 這兩個旗標控制的就是這件事。",
+    "",
+    "填完驗證：python tools/routing-ir/routing_ir.py --check",
+    "看結果：  python tools/routing-ir/routing_ir.py --show MYTECH",
+    "已完成的實例：finfet.json（最單純）/ cfet.json / qfet.json"
+  ],
+
+  "_classes": {
+    "od": "擴散區。router 只需要知道位置，不會沿著它繞。in_graph 永遠 false。",
+    "poly": "閘極。同時也是放置層 —— 電晶體坐在上面。垂直，走 CPP 格點。in_graph true。",
+    "md": "區域互連。用 contacts 分是接 source/drain 還是接 gate。in_graph false。",
+    "metal": "真正的繞線層。必須有 direction / pitch / offset / width。in_graph true。",
+    "via": "連接兩層 —— 寫在 connect 區段，不寫在 layers 裡。",
+    "virtual": "圖上的捷徑，沒有光罩 —— 寫在 shortcuts 區段。"
+  },
+
+  "source": {
+    "_note": "指向 engine 的檔案。--check 會拿這裡每個 pitch/direction/via 去跟它對，對不上就報錯，所以這份 IR 不會跟 engine 走鐘。",
+    "layer_json": "PROBE3_MYTECH_2F_4T_4530OF0.json",
+    "preset": "MYTECH_4T_SH"
+  },
+
+  "tiers": [
+    { "id": "bot", "devices": ["nmos"], "note": "下層元件放在哪個 poly 層上" },
+    { "id": "top", "devices": ["pmos"], "note": "沒有堆疊的話這段只留一個" }
+  ],
+
+  "layers": [
+    {
+      "id": "OD_N", "class": "od", "tier": "bot",
+      "in_graph": false, "access_via": "BPC", "gds": "11/2",
+      "note": "下層 tier 的擴散區"
+    },
+    {
+      "id": "MD_N", "class": "md", "contacts": "source_drain", "tier": "bot",
+      "in_graph": false, "access_via": "BPC", "enabled_by": "lisd_routing",
+      "gds": "17/2",
+      "note": "S/D 區域互連。打開 lisd_routing 等於允許 via 落在 S/D 欄。"
+    },
+    {
+      "id": "BPC", "class": "poly", "tier": "bot", "in_graph": true,
+      "direction": "V", "pitch": 45.0, "offset": 0.0, "width": 16.0,
+      "gds": "6/0",
+      "note": "下層放置層。CPP = 45。"
+    },
+    {
+      "id": "M0", "class": "metal", "in_graph": true,
+      "direction": "H", "pitch": 24.0, "offset": 0.0, "width": 14.0,
+      "io_pin": true, "gds": "15/0",
+      "note": "第一層繞線金屬，水平。也是 pin 存取層。"
+    },
+    {
+      "id": "M1", "class": "metal", "in_graph": true,
+      "direction": "V", "pitch": 30.0, "offset": 0.0, "width": 14.0,
+      "gds": "19/0",
+      "note": "第二層繞線金屬，垂直。"
+    }
+  ],
+
+  "connect": [
+    {
+      "lower": "BPC", "upper": "M0", "via": "BCA", "gds": null,
+      "note": "gds 填 null 表示這個 via 沒有自己的圖層號 —— writer 會把它畫在別層上。"
+    },
+    { "lower": "M0", "upper": "M1", "via": "V0", "gds": "18/0" }
+  ],
+
+  "shortcuts": [
+    {
+      "a": "BPC", "b": "M0", "method": "boundary",
+      "note": "圖上的捷徑，沒有實體。method: overlap | colwise | sdcolwise | overlapGate | boundary"
+    }
+  ],
+
+  "pins": {
+    "access": ["BPC", "M0"],
+    "io": ["M0"]
+  },
+
+  "rules": {
+    "_note": "選填。沒填就用 archit/config.py 的預設值。",
+    "min_area": { "M0": 20, "M1": 140 },
+    "eol": { "M0": 60, "M1": 45 },
+    "via_c2c": { "M0,M1": 45 }
+  },
+
+  "x_vendor": {
+    "_note": "任何 x_ 開頭的鍵都是廠商自訂欄位。讀取端會保留但忽略它，所以你可以先放這裡，不用等格式改版。"
+  }
+}

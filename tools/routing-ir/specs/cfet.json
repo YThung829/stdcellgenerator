@@ -1,0 +1,166 @@
+{
+  "schema": "smtcell/routing-ir@1",
+  "name": "CFET",
+  "summary": "兩層垂直堆疊。P/N 靠 tier 分開，上下共用同一塊平面面積。",
+  "source": {
+    "layer_json": "PROBE3_CFET_2F_4T_4530OF0.json",
+    "preset": "CFET_4T_SH"
+  },
+  "tiers": [
+    {
+      "id": "bot",
+      "devices": [
+        "nmos"
+      ],
+      "note": "下層元件，放在 BPC 上"
+    },
+    {
+      "id": "top",
+      "devices": [
+        "pmos"
+      ],
+      "note": "上層元件，放在 PC 上"
+    }
+  ],
+  "layers": [
+    {
+      "id": "OD_N",
+      "class": "od",
+      "tier": "bot",
+      "in_graph": false,
+      "access_via": "BPC",
+      "gds": "11/2",
+      "note": "下層 tier 的擴散區"
+    },
+    {
+      "id": "OD_P",
+      "class": "od",
+      "tier": "top",
+      "in_graph": false,
+      "access_via": "PC",
+      "gds": "11/1",
+      "note": "上層 tier 的擴散區。x/y 跟 OD_N 完全相同，只差在 z。"
+    },
+    {
+      "id": "MD_N",
+      "class": "md",
+      "contacts": "source_drain",
+      "tier": "bot",
+      "in_graph": false,
+      "access_via": "BPC",
+      "enabled_by": "lisd_routing",
+      "gds": "17/2",
+      "note": "下層 S/D 區域互連。CFET 強制開啟 lisd_routing。"
+    },
+    {
+      "id": "MD_P",
+      "class": "md",
+      "contacts": "source_drain",
+      "tier": "top",
+      "in_graph": false,
+      "access_via": "PC",
+      "enabled_by": "lisd_routing",
+      "gds": "17/1",
+      "note": "上層 S/D 區域互連"
+    },
+    {
+      "id": "MG",
+      "class": "md",
+      "contacts": "gate",
+      "in_graph": false,
+      "access_via": "PC",
+      "enabled_by": "lig_routing",
+      "gds": "16/0",
+      "note": "Gate 區域互連。CFET 強制開啟 lig_routing。"
+    },
+    {
+      "id": "BPC",
+      "class": "poly",
+      "in_graph": true,
+      "direction": "V",
+      "pitch": 45.0,
+      "offset": 0.0,
+      "width": 16.0,
+      "gds": "6/0",
+      "tier": "bot"
+    },
+    {
+      "id": "PC",
+      "class": "poly",
+      "in_graph": true,
+      "direction": "V",
+      "pitch": 45.0,
+      "offset": 0.0,
+      "width": 16.0,
+      "gds": "7/1",
+      "tier": "top"
+    },
+    {
+      "id": "M0",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "H",
+      "pitch": 24,
+      "offset": 0.0,
+      "width": 14.0,
+      "gds": "15/0"
+    },
+    {
+      "id": "M1",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "V",
+      "pitch": 30.0,
+      "offset": 0.0,
+      "width": 14.0,
+      "gds": "19/0"
+    },
+    {
+      "id": "M2",
+      "class": "metal",
+      "in_graph": true,
+      "direction": "H",
+      "pitch": 24.0,
+      "offset": 0.0,
+      "width": 14.0,
+      "gds": "20/0"
+    }
+  ],
+  "connect": [
+    {
+      "lower": "BPC",
+      "upper": "M0",
+      "via": "BCA",
+      "gds": null
+    },
+    {
+      "lower": "PC",
+      "upper": "M0",
+      "via": "CA",
+      "gds": "14/0"
+    },
+    {
+      "lower": "M0",
+      "upper": "M1",
+      "via": "V0",
+      "gds": "18/0"
+    },
+    {
+      "lower": "M1",
+      "upper": "M2",
+      "via": "V1",
+      "gds": "21/0"
+    }
+  ],
+  "shortcuts": [],
+  "pins": {
+    "access": [
+      "BPC",
+      "M0"
+    ],
+    "io": [
+      "M0"
+    ]
+  },
+  "grid": {}
+}

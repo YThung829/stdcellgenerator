@@ -106,6 +106,8 @@ data dir 是 308 KB。細節見 [`docs/opencode-state-spike.md`](docs/opencode-s
 * **[開發計劃](docs/plan.md)** — 架構、已確認的決策、各階段進度。
 * **[寫一條 constraint plugin](engine/AGENTS.md)** — `@constraint` 介面、`inst` 上所有
   可用的變數字典、`lgg` API。這份文件由引擎原始碼自動產生,不要手改。
+* **[製程架構 IR 指南](docs/process-ir.md)** — 三份製程 IR 怎麼填、怎麼讀,以及哪些
+  欄位機器會驗、哪些是人為斷言。要加新架構(FinFET / CFET / QFET 之外)先看這份。
 
 ## Repo 結構
 
@@ -115,5 +117,8 @@ engine/                     # SMTCellUCSD 2.0 就地演進
   src/cellgen/plugins/      #   constraint registry + loader + 五個掛點
   AGENTS.md                 #   自動產生的 constraint 撰寫指南
 services/api/               # FastAPI:沙盒、快照、opencode 代理、artifact
+tools/routing-ir/           # 繞線視角 IR:router 需要知道的最小層集合
+tools/stack3d/              # 光罩疊構 IR + 製程立體圖 / 遷移動畫
+docs/process-ir.md          # 三份製程 IR 的填寫與解讀指南
 docs/plan.md                # 開發計劃與進度
 ```

@@ -367,6 +367,8 @@ python tools/stack3d/build.py
 
 `layers.py` 的 `TECHS` 每筆欄位的意義寫在該檔案的註解裡。
 
+TOML 疊構檔怎麼填、怎麼讀，以及哪些欄位機器會驗、哪些是人為斷言（尤其 z 厚度），見 [`docs/process-ir.md`](../../docs/process-ir.md)。
+
 ## 已知限制
 
 - 每個 polygon 是用 bounding box 畫成長方體。三個 writer 目前只 insert `pya.Box`，

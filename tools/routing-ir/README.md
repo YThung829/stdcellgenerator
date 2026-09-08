@@ -134,6 +134,8 @@ python tools/routing-ir/routing_ir.py --emit MYTECH > new_layer.json
 | `tools/stack3d/techs/*.toml` | 完整光罩疊構與 z 模型 | 立體圖 |
 | `tools/stack3d/migrations/*.json` | 兩個製程之間的層對應 | 遷移動畫 |
 
+三份怎麼填、怎麼讀，以及哪些欄位機器會驗、哪些是人為斷言，見 [`docs/process-ir.md`](../../docs/process-ir.md)。
+
 三份都可以被機器驗證，也都由製程工程師填得起來。長遠來看繞線視角這份可以成為
 上游（`--emit` 已經是那個方向的第一步），但目前三份各自對著 engine 的真實檔案
 驗證，不會互相矛盾。

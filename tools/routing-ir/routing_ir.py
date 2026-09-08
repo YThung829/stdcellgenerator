@@ -277,6 +277,9 @@ def derive(tech: str, engine: Path) -> dict:
         "source": {"layer_json": cfg["layer_json"], "preset": cfg["preset"]},
         "tiers": [], "layers": layers, "connect": connect,
         "shortcuts": shortcuts,
+        # io_pin is only marked in some layer JSONs. Leave it empty rather
+        # than guessing -- an asserted value that looks derived is worse than
+        # a blank the filler has to think about.
         "pins": {"access": [], "io": [m[1]["layer_name"] for m in metals
                                       if m[1].get("io_pin")]},
     }

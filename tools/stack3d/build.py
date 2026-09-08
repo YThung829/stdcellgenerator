@@ -5,12 +5,12 @@ Pipeline
     <engine>/input/layer/*.json  ─┐
     <engine>/input/presets/*.mk  ─┤
     data/solved/<tech>/*.res     ─┼─> payload ─> template/{head,body,app.js} ─> smtcell-stack.html
-    data/solved/<tech>/*.gds     ─┘      ▲
-                                    layers.py (the z model)
+    data/solved/<tech>/*.gdstxt  ─┘      ▲
+                                    techs/*.toml (the z model)
 
-By default nothing is re-solved: the ``.res`` / ``.gds`` files under
-``data/solved/`` are committed, so the page rebuilds on a checkout with only
-``klayout`` installed.
+By default nothing is re-solved: the ``.res`` / ``.gdstxt`` files under
+``data/solved/`` are committed and are plain text, so the page rebuilds on a
+checkout with nothing installed at all.
 
     python tools/stack3d/build.py                     # rebuild from committed runs
     python tools/stack3d/build.py --gds               # re-run the GDS writers
@@ -19,7 +19,7 @@ By default nothing is re-solved: the ``.res`` / ``.gds`` files under
 
 ``--solve`` shells out to ``src.cellgen.run`` inside the engine and needs the
 engine's own dependencies (ortools, klayout, networkx, loguru, matplotlib,
-scikit-learn). Everything else only needs klayout.
+scikit-learn). ``--gds`` needs klayout. A plain rebuild needs neither.
 
 Portability
 -----------
@@ -29,8 +29,9 @@ The engine location and cell name are not baked in::
     --cell NAME     or  $STACK3D_CELL     (default: INV_X1)
 
 so this tool can be dropped into a fork whose engine lives elsewhere. Adding an
-architecture is a ``layers.py`` edit only -- see the ``stack3d-onboard-tech``
-skill, or tools/stack3d/README.md.
+architecture means dropping a spec in ``techs/`` -- nothing here needs editing.
+See ``techs/_TEMPLATE.toml``, the ``stack3d-onboard-tech`` skill, or
+tools/stack3d/README.md.
 """
 from __future__ import annotations
 
